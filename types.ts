@@ -20,7 +20,8 @@ export enum ConversionAngle {
 
 export enum AppView {
   GENERATOR = 'generator',
-  HISTORY = 'history'
+  HISTORY = 'history',
+  LIBRARY = 'library'
 }
 
 export interface SocialStrategy {
@@ -131,6 +132,7 @@ export interface CountdownSlot {
   description: string;
   productUrl?: string;
   customScript?: string;
+  referenceYoutubeUrls?: string[];
   media: {
     images: string[];
     clips: string[];
@@ -138,6 +140,9 @@ export interface CountdownSlot {
   excludeFromMaster?: boolean;
   category?: string;
   tags?: string[];
+  targetAudience?: string;
+  sourceVideoUrl?: string;
+  clipType?: string;
   generated: {
     videoUrl?: string;
     audioUrl?: string;
@@ -145,6 +150,7 @@ export interface CountdownSlot {
     videoPrompt?: string;
     status: 'idle' | 'generating' | 'done' | 'error';
     error?: string;
+    debugLog?: string[];
   };
 }
 
@@ -159,4 +165,10 @@ export interface CountdownProject {
   finalVideoUrl?: string;
   connectiveNarrative?: string;
   status: 'idle' | 'assembling' | 'done' | 'error';
+  settings: {
+    isAffiliatePromotion: boolean;
+    legalDisclosureText: string;
+    debugMode: boolean;
+    videoType?: string;
+  };
 }

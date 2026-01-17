@@ -19,8 +19,28 @@ export class GeminiService {
     return match ? match[1] : 'image/jpeg';
   }
 
-  static async optimizePrompts(details: ProductDetails, platform: Platform, images?: string[]): Promise<OptimizedPrompt> {
+  static async optimizePrompts(details: ProductDetails & { referenceYoutubeUrls?: string[] }, platform: Platform, images?: string[]): Promise<OptimizedPrompt> {
     const ai = this.getAI();
+
+    // Build YouTube reference context if provided
+    const youtubeReferenceContext = details.referenceYoutubeUrls && details.referenceYoutubeUrls.length > 0
+      ? `
+        🎬 YOUTUBE STYLE REFERENCE VIDEOS:
+        The user has provided the following YouTube videos as style/format references.
+        MANDATORY: Use Google Search to analyze these videos and extract:
+        - Visual style and editing patterns
+        - Pacing and rhythm
+        - Hook techniques used
+        - Transition styles
+        - Overall aesthetic and tone
+        - What makes these videos engaging
+
+        Reference Videos:
+        ${details.referenceYoutubeUrls.map((url, i) => `${i + 1}. ${url}`).join('\n        ')}
+
+        Apply the successful elements from these reference videos to your generated content prompts.
+        `
+      : '';
 
     // Build product context - prioritize product URL if provided
     const productContext = details.productUrl
@@ -58,6 +78,7 @@ export class GeminiService {
         text: `PERFORM DEEP MARKET ANALYSIS, TREND INTELLIGENCE & CONVERSION PSYCHOLOGY
 
         ${productContext}
+        ${youtubeReferenceContext}
 
         🔍 PHASE 1: PRODUCT DATA EXTRACTION & VERIFICATION
         
@@ -414,6 +435,66 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
     }
   }
 
+  static async analyzeVideoContent(
+    videoUrl: string,
+    targetAudience: string,
+    productName: string
+  ): Promise<Array<{ description: string; script: string; visualBrief: string; audience_alignment: string; clip_type: string }>> {
+    const ai = this.getAI();
+
+    // Director Persona Prompt
+    const prompt = `
+      🚨 DIRECTOR MODE ACTIVATED: ANALYZE & EXTRACT CONCEPTS
+      
+      SOURCE MATERIAL: ${videoUrl}
+      PRODUCT: ${productName}
+      TARGET AUDIENCE: ${targetAudience}
+
+      YOUR MISSION:
+      You are a World-Class Film Director & Editor. Your goal is to "watch" (via research/analysis) the content at this URL and other viral videos for this product.
+      
+      TASK:
+      1. Watch the video and extract the best "Lego Blocks" (short clips) that could be rearranged to create NEW, UNIQUE content.
+      2. Categorize each clip into one of these specific types:
+         - 'UNBOXING' (Opening, packaging, first impressions)
+         - 'HOW_TO' (Tutorial, setup, specific action guide)
+         - 'TROUBLESHOOTING' (Fixing common issues, maintenance)
+         - 'FEATURE_HIGHLIGHT' (Cool specific capability)
+         - 'AESTHETIC' (B-roll, beauty shots)
+      3. "EXTRACT" 4-6 distinct moments.
+      4. STRIP all identifiable people/faces. Roto-scope concept: "Floating hands" or "Product only".
+      
+      OUTPUT FORMAT (JSON):
+      Return an array of "Clips":
+      [
+        {
+          "description": "Visual description of the event",
+          "script": "Narrative segment matching the clip type (e.g. for How-To: 'First, press the power button...')",
+          "visualBrief": "Detailed Veo prompt. Cinematic, steady. NO FACES.",
+          "audience_alignment": "Explanation",
+          "clip_type": "UNBOXING" | "HOW_TO" | "TROUBLESHOOTING" | "FEATURE_HIGHLIGHT" | "AESTHETIC"
+        }
+      ]
+    `;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json"
+        } as any
+      });
+
+      if (!response.text) throw new Error("Director analysis failed to return data.");
+      return JSON.parse(response.text);
+    } catch (err: any) {
+      console.error("Director Mode Error:", err);
+      throw new Error(`Director analysis failed: ${err.message}`);
+    }
+  }
+
 
 
   private static decode(base64: string): Uint8Array {
@@ -599,35 +680,52 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
 
         const analysisParts: any[] = [
           {
-            text: `🚨 YOU ARE ANALYISING SOURCE MEDIA FOR A PREMIUM PRODUCT VIDEO. 
-            
+            text: `🚨 CRITICAL: CREATE A HIGH-QUALITY, REALISTIC PRODUCT VIDEO
+
+            You are analyzing reference media to create an 8-second product showcase video that looks REAL and PROFESSIONAL.
+
             YOUR MISSION:
-            1. Identify the EXACT product, its features, and its aesthetic.
-            2. Describe the movement, lighting, and environment in the provided clips.
-            3. CREATE A GENERATION PROMPT THAT ENHANCES AND EXTENDS THIS SPECIFIC MEDIA.
-            
-            🚨 MANDATORY: DO NOT "BUTCHER" THE SOURCE MEDIA. 
-            Your goal is to SHAPE and ENHANCE what you see into a high-quality product clip.
-            - If a clip shows a hand movement, describe it to maintain continuity.
-            - If a clip has a specific lighting style, preserve it.
-            - Focus on "Cinematic Extension" - making the source material look like a premium studio-grade advertisement.
+            1. Study the EXACT product in the reference images/clips - every detail matters
+            2. Extract the precise visual DNA: colors (exact hex codes if possible), materials, textures, logos, proportions
+            3. Create a video generation prompt that produces REALISTIC footage that could pass as real UGC
 
-            MANDATORY VISUAL ANALYSIS:
-            - PRODUCT: Colors, materials, branding, text.
-            - MOTION: How the product is being moved or used in clips.
-            - AESTHETIC: Lighting, background, camera angle.
+            🚨 ABSOLUTE REQUIREMENTS FOR REALISM:
 
-            NOW CREATE A VIDEO GENERATION PROMPT based on this scene: "${prompt}"
+            PRODUCT ACCURACY (Most Critical):
+            - The product MUST look IDENTICAL to the reference images
+            - Exact colors - no shifting, no artistic interpretation
+            - Correct size, shape, and proportions
+            - All text, logos, and branding must be accurate and readable
+            - Materials should look authentic (plastic looks like plastic, metal like metal, etc.)
 
-            The prompt MUST include:
-            - The EXACT product from the source media.
-            - Instructions to EXTEND and ENHANCE the existing visual context.
-            - "Stitched Continuity" - ensure the new video feels like it belongs with the provided clips.
-            - 8 seconds of smooth, high-fidelity footage.
+            HUMAN REALISM:
+            - Real human hands with natural skin tones and textures
+            - Anatomically correct - all 5 fingers visible and natural
+            - Natural grip and interaction with the product
+            - Realistic movements - not robotic, not too smooth
 
-            FORMAT YOUR RESPONSE AS:
-            VISUAL ANALYSIS: [Detailed observations]
-            VIDEO GENERATION PROMPT: [Complete detailed prompt focusing on enhancement and continuity]` }
+            ENVIRONMENT & LIGHTING:
+            - Authentic home or studio setting (not overly perfect)
+            - Natural lighting: window light, golden hour, or soft diffused light
+            - Realistic shadows that match the lighting direction
+            - Subtle imperfections that make it look real (slight grain, natural bokeh)
+
+            CAMERA WORK:
+            - Handheld smartphone aesthetic with subtle natural movement
+            - Focus pulls that feel organic
+            - Framing that a real person would use
+
+            CONTEXT FOR THIS VIDEO: "${prompt}"
+
+            ANALYZE THE REFERENCE MEDIA AND PROVIDE:
+
+            VISUAL ANALYSIS:
+            - Exact product description (colors, materials, size, features, any text/logos)
+            - Current lighting and environment style
+            - Any motion or usage patterns shown
+
+            VIDEO GENERATION PROMPT:
+            [Write a detailed prompt that will generate a realistic 8-second clip featuring THIS EXACT PRODUCT. Include specific details about the product appearance, human interaction, environment, lighting, and camera movement. The goal is footage that looks indistinguishable from real UGC.]` }
         ];
 
         if (referenceImages) {
@@ -670,10 +768,22 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
       }
     }
 
-    const constraint = " MAXIMUM VISUAL FIDELITY. Rigid object permanence. No morphing. Clean cinematic motion. Professional studio lighting. 4K ProRES aesthetic.";
-    const continuityFocus = " MAINTAIN VISUAL CONTINUITY: The generated clip MUST look like a premium enhancement of the provided source media. Do not deviate from the product appearance or core aesthetic.";
+    const constraint = ` CRITICAL QUALITY REQUIREMENTS:
+    - MAXIMUM VISUAL FIDELITY: The product must look EXACTLY like the reference images - same colors, textures, logos, proportions
+    - RIGID OBJECT PERMANENCE: The product must not morph, distort, or change shape throughout the clip
+    - REALISTIC HUMAN INTERACTION: Show natural hand movements, proper grip, realistic skin tones
+    - AUTHENTIC LIGHTING: Natural window light or soft studio lighting, realistic shadows and reflections
+    - CLEAN CINEMATIC MOTION: Smooth camera movements, no jitter, professional quality
+    - 4K UGC AESTHETIC: Looks like high-end smartphone footage shot by a real person`;
 
-    const finalVideoPrompt = `CINEMATIC PRODUCT ADVERTISEMENT. ${videoPrompt}. AMBIENT: ${ambientSound}. ${constraint}${continuityFocus}`;
+    const continuityFocus = ` VISUAL ACCURACY MANDATE:
+    - The product in the video MUST match the reference images exactly
+    - Preserve exact product colors (no color shifting)
+    - Maintain correct product scale and proportions
+    - Keep all logos, text, and branding accurate
+    - Do not add or remove product features`;
+
+    const finalVideoPrompt = `HIGH-FIDELITY PRODUCT SHOWCASE VIDEO. ${videoPrompt}. AMBIENT: ${ambientSound}. ${constraint} ${continuityFocus}`;
 
     const generateConfig: any = {
       model: 'veo-3.1-generate-preview',
@@ -698,12 +808,165 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
       onProgress("Refining product details & cinematic motion...");
     }
 
+    // Log full response for debugging
+    console.log("Veo API Full Response:", JSON.stringify(result, null, 2));
+
     const downloadLink = result.response?.generatedVideos?.[0]?.video?.uri;
-    if (!downloadLink) throw new Error("No video URL returned from Veo generation");
+
+    if (!downloadLink) {
+      // Check for rejection reasons
+      const rejectionReason = result.response?.generatedVideos?.[0]?.video?.rejectionReason;
+      const errorDetails = result.response?.error || result.error;
+
+      if (rejectionReason) {
+        throw new Error(`Video generation rejected: ${rejectionReason}`);
+      } else if (errorDetails) {
+        throw new Error(`Video generation error: ${JSON.stringify(errorDetails)}`);
+      } else {
+        console.error("Unexpected Veo response structure:", result);
+        throw new Error("No video URL returned from Veo generation. Check console for full API response.");
+      }
+    }
     const apiKey = this.getAPIKey();
     const response = await fetch(`${downloadLink}&key=${apiKey}`);
     if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
     return URL.createObjectURL(await response.blob());
+  }
+
+  /**
+   * SIMPLE VIDEO GENERATION
+   * Just creates an 8-second product video from images + feature description.
+   * No marketing fluff, no countdown logic, no complex prompts.
+   */
+  static async generateSimpleVideo(
+    productName: string,
+    featureDescription: string,
+    referenceImages: string[],
+    onProgress: (status: string) => void,
+    targetAudience: string = "General"
+  ): Promise<{ videoUrl: string; script: string; videoPrompt: string }> {
+    const ai = this.getAI();
+
+    onProgress(`Director Mode: Analyzing scene for ${targetAudience}...`);
+
+    // Step 1: Analyze images to understand the product
+    let productAnalysis = '';
+    if (referenceImages.length > 0) {
+      const analysisParts: any[] = [
+        {
+          text: `Look at these product images and describe:
+1. What is this product? (exact name, type, category)
+2. What does it look like? (colors, materials, size, shape, any text/logos)
+3. How would someone use it?
+
+Keep it brief - just the facts.`
+        }
+      ];
+
+      referenceImages.forEach(img => {
+        analysisParts.push({
+          inlineData: {
+            mimeType: this.getMimeType(img),
+            data: img.split(',')[1]
+          }
+        });
+      });
+
+      try {
+        const analysisResponse = await ai.models.generateContent({
+          model: 'gemini-2.0-flash-exp',
+          contents: [{ role: 'user', parts: analysisParts }]
+        });
+        productAnalysis = analysisResponse.text || '';
+      } catch (err) {
+        console.error("Image analysis error:", err);
+        productAnalysis = productName;
+      }
+    }
+
+    onProgress("Creating video prompt...");
+
+    // Step 2: Generate a simple video prompt
+    const videoPrompt = `8-second UGC-style product video.
+Product: ${productName || productAnalysis}
+Feature to showcase: ${featureDescription || 'general product overview'}
+
+Show a real person's hands naturally using/holding this product.
+Natural lighting (window light or soft indoor lighting).
+Clean, simple background (desk, table, couch).
+Smooth, subtle camera movement.
+The product must look exactly like the reference image - same colors, size, and details.`;
+
+    // Step 3: Generate a simple script (15-20 words max)
+    const scriptPrompt = `Write a 15-20 word voiceover script for a product video.
+Product: ${productName}
+Feature: ${featureDescription || 'general product overview'}
+
+Rules:
+- Conversational, not salesy
+- One clear benefit
+- No hashtags or emojis
+- End with a soft call to action
+
+Just output the script, nothing else.`;
+
+    let script = '';
+    try {
+      const scriptResponse = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: scriptPrompt }] }]
+      });
+      script = scriptResponse.text || `Check out the ${featureDescription || productName}. It's a game changer.`;
+    } catch (err) {
+      script = `Check out the ${featureDescription || productName}. It's a game changer.`;
+    }
+
+    onProgress("Generating video with Veo...");
+
+    // Step 4: Generate the video
+    const generateConfig: any = {
+      model: 'veo-3.1-generate-preview',
+      prompt: videoPrompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: '1080p',
+        aspectRatio: '9:16',
+        includeAudio: true
+      }
+    };
+
+    // Use first image as reference
+    if (referenceImages.length > 0) {
+      generateConfig.image = {
+        imageBytes: referenceImages[0].split(',')[1],
+        mimeType: this.getMimeType(referenceImages[0])
+      };
+    }
+
+    let result = await (ai as any).models.generateVideos(generateConfig);
+    while (!result.done) {
+      await new Promise(resolve => setTimeout(resolve, 8000));
+      result = await (ai as any).operations.getVideosOperation({ operation: result });
+      onProgress("Rendering video...");
+    }
+
+    console.log("Veo API Response:", JSON.stringify(result, null, 2));
+
+    const downloadLink = result.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) {
+      const rejectionReason = result.response?.generatedVideos?.[0]?.video?.rejectionReason;
+      if (rejectionReason) {
+        throw new Error(`Video rejected: ${rejectionReason}`);
+      }
+      throw new Error("No video generated. Check console for details.");
+    }
+
+    const apiKey = this.getAPIKey();
+    const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
+    if (!videoResponse.ok) throw new Error(`Failed to download video: ${videoResponse.statusText}`);
+    const videoUrl = URL.createObjectURL(await videoResponse.blob());
+
+    return { videoUrl, script, videoPrompt };
   }
 
   static async regenerateImageWithFeedback(
@@ -842,24 +1105,35 @@ ${originalPrompt}`;
     return URL.createObjectURL(await response.blob());
   }
 
-  static async generateConnectiveNarrative(slots: { rank: number, name: string }[]): Promise<string> {
+  static async generateConnectiveNarrative(slots: { rank: number, name: string }[], isAffiliate?: boolean, disclosure?: string, videoType: string = 'SHOWCASE'): Promise<string> {
     const ai = this.getAI();
     const slotContext = slots.map(s => `Rank #${s.rank}: ${s.name}`).join('\n');
+
+    let typeContext = "";
+    switch (videoType) {
+      case 'UNBOXING': typeContext = "Focus on the excitement of opening, packaging feel, and first impressions. Use words like 'revealing', 'inside the box', 'packaging'."; break;
+      case 'HOW_TO': typeContext = "Focus on utility, steps, and learning. Use words like 'guide', 'step-by-step', 'how to use'. Tone: Educational & Clear."; break;
+      case 'TROUBLESHOOTING': typeContext = "Focus on solving problems and fixing issues. Tone: Helpful, reassuring, 'don't worry'."; break;
+      case 'COMPARISON': typeContext = "Focus on pros/cons and differences. Tone: Analytical and objective."; break;
+      default: typeContext = "Focus on general showcase and premium appeal."; break;
+    }
 
     try {
       const response = await ai.models.generateContent({
         model: "gemini-2.0-flash-exp",
         contents: [{
           role: 'user', parts: [{
-            text: `You are writing a CONNECTIVE NARRATIVE for a top ${slots.length} countdown video. 
+            text: `You are writing a CONNECTIVE NARRATIVE for a top ${slots.length} ${videoType.toLowerCase()} video. 
         Your goal is to provide the "glue" that holds the video together.
         
         SITUATION:
-        We have ${slots.length} products being showcased. Each product has its own detailed description.
+        We have ${slots.length} products being covered. Each product has its own detailed description.
         You need to write an INTRO, TRANSITIONS between ranks, and an OUTRO.
-        
-        TONE:
-        Engaging, sweet, approachable, and premium. You sound like a helpful friend who is genuinely excited about these finds.
+        ${isAffiliate ? `\n🚨 LEGAL COMPLIANCE: This is an affiliate promotion. You MUST subtly but clearly mention '${disclosure}' in the intro and outro.` : ''}
+
+        TONE & STYLE (${videoType}):
+        ${typeContext}
+        General Tone: Engaging, sweet, approachable, and premium. You sound like a helpful friend.
 
         PRODUCTS:
         ${slotContext}
@@ -867,7 +1141,7 @@ ${originalPrompt}`;
         OUTPUT FORMAT:
         Write a single cohesive script that leaves pauses (marked as [PAUSE]) where the product-specific descriptions will go.
         
-        EXAMPLE: "Today we're looking at the top ${slots.length} game changers for your home. Starting things off... [PAUSE] ...and that was rank ${slots[0].rank}. But moving on to rank ${slots[1]?.rank || 'X'}, this next one is a total life saver... [PAUSE] ...and finally, our number one spot, the ultimate choice... [PAUSE] ...thanks for watching our top ${slots.length} countdown!"
+        EXAMPLE: "Today we're looking at the top ${slots.length} game changers. Starting things off... [PAUSE] ...and that was rank ${slots[0].rank}. But moving on to rank ${slots[1]?.rank || 'X'}, this next one is interesting... [PAUSE] ...and finally, our number one spot... [PAUSE] ...thanks for watching!"
 
         Keep it concise and focus on the SEAMLESS FLOW.` }]
         }],

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from './components/Layout';
 import MediaDropzone from './components/MediaDropzone';
+import AssetLibrary from './components/AssetLibrary';
 import { GeminiService } from './services/geminiService';
 import {
   CountdownProject,
@@ -28,7 +29,12 @@ const App: React.FC = () => {
       id: Math.random().toString(36).substr(2, 9),
       title: 'New Product Countdown',
       slots: INITIAL_SLOTS,
-      status: 'idle' as const
+      status: 'idle' as const,
+      settings: {
+        isAffiliatePromotion: false,
+        legalDisclosureText: 'Commission Earned / #ad',
+        debugMode: false
+      }
     };
   });
 
@@ -37,7 +43,7 @@ const App: React.FC = () => {
     return saved ? JSON.parse(saved) : { slots: [] };
   });
 
-  const [showLibrary, setShowLibrary] = useState(false);
+  const [currentView, setCurrentView] = useState<AppView>(AppView.GENERATOR);
   const [activeSlotId, setActiveSlotId] = useState<string>(project.slots[0].id);
   const [isKeySelected, setIsKeySelected] = useState(!!localStorage.getItem('conversionflow_key'));
   const [globalStatus, setGlobalStatus] = useState<string>('');
@@ -138,6 +144,35 @@ const App: React.FC = () => {
     }
   };
 
+  const duplicateSlot = (slotId: string) => {
+    const slot = project.slots.find(s => s.id === slotId);
+    if (!slot) return;
+
+    const nextRank = project.slots.length > 0 ? Math.max(...project.slots.map(s => s.rank)) + 1 : 1;
+    const newSlot: CountdownSlot = {
+      id: Math.random().toString(36).substr(2, 9),
+      rank: nextRank,
+      productName: slot.productName,
+      description: '', // Clear description so user focuses on new feature
+      productUrl: slot.productUrl,
+      customScript: '', // Clear script for new feature
+      referenceYoutubeUrls: slot.referenceYoutubeUrls ? [...slot.referenceYoutubeUrls] : [],
+      media: {
+        images: [...slot.media.images], // Keep same product images
+        clips: [...slot.media.clips]
+      },
+      category: slot.category,
+      generated: { status: 'idle' as const }
+    };
+
+    setProject(prev => ({
+      ...prev,
+      slots: [newSlot, ...prev.slots].sort((a, b) => b.rank - a.rank)
+    }));
+    setActiveSlotId(newSlot.id);
+    setGlobalStatus(`Duplicated! Now describe the next feature for ${slot.productName || 'this product'}.`);
+  };
+
   const toggleSlotInclusion = (slotId: string) => {
     const slot = project.slots.find(s => s.id === slotId);
     if (!slot) return;
@@ -211,24 +246,30 @@ const App: React.FC = () => {
     const slot = project.slots.find(s => s.id === slotId);
     if (!slot) return;
 
-    if (!slot.productName && !slot.productUrl) {
-      alert("Please provide a product name or URL to generate a script.");
+    // Check if at least one visual reference is provided (image, clip, or product URL)
+    const hasImages = slot.media.images && slot.media.images.length > 0;
+    const hasClips = slot.media.clips && slot.media.clips.length > 0;
+    const hasProductUrl = slot.productUrl && slot.productUrl.trim().length > 0;
+
+    if (!hasImages && !hasClips && !hasProductUrl) {
+      alert("Please provide at least one visual reference: an image, video clip, or product URL.");
       return;
     }
 
-    setGlobalStatus(`Generating high-intent script for Rank #${slot.rank}...`);
+    setGlobalStatus(`Generating script for ${slot.productName || 'product'}...`);
     try {
       const details = {
         name: slot.productName,
-        benefit: `This is Rank #${slot.rank} in our countdown. ${slot.description}`,
+        benefit: slot.description,
         price: '',
         audience: 'General Consumers',
         cta: 'Check it out',
         angle: 4,
         productUrl: slot.productUrl,
+        referenceYoutubeUrls: slot.referenceYoutubeUrls,
       } as any;
       const optimized = await GeminiService.optimizePrompts(details, Platform.TIKTOK, slot.media.images);
-      const script = `Coming in at rank ${slot.rank}. ${optimized.audioScript}`;
+      const script = optimized.audioScript;
       updateSlot(slotId, { customScript: script });
       setGlobalStatus("Script generated! You can now edit it or start production.");
     } catch (err: any) {
@@ -240,64 +281,51 @@ const App: React.FC = () => {
     const slot = project.slots.find(s => s.id === slotId);
     if (!slot) return;
 
-    if (!slot.productName && !slot.productUrl) {
-      alert("Please provide a product name or URL for this slot.");
+    // Check if at least one image is provided
+    const hasImages = slot.media.images && slot.media.images.length > 0;
+
+    if (!hasImages) {
+      alert("Please upload at least one product image.");
       return;
     }
 
     updateSlot(slotId, { generated: { ...slot.generated, status: 'generating' } });
-    setGlobalStatus(`Analyzing Rank #${slot.rank}: ${slot.productName || 'Product'}...`);
 
     try {
-      // 1. Optimize prompts for this specific rank
-      const details = {
-        name: slot.productName,
-        benefit: `This is Rank #${slot.rank} in our countdown. ${slot.description}`,
-        price: '',
-        audience: 'General Consumers',
-        cta: 'Check it out',
-        angle: 4, // ConversionAngle.COMPARISON is 4-indexed usually or we can just pass the enum
-        productUrl: slot.productUrl,
-        customVideoInstruction: `CRITICAL: The video must feature a clear "Rank #${slot.rank}" overlay or mention. Show the product as a premium choice.`
-      } as any;
-
-      const optimized = await GeminiService.optimizePrompts(details, Platform.TIKTOK, slot.media.images);
-
-      // 2. Generate HD Audio (Chirp 3)
-      setGlobalStatus(`Synthesizing HD Narration for Rank #${slot.rank}...`);
-      const script = slot.customScript || `Coming in at rank ${slot.rank}. ${optimized.audioScript}`;
-      const audioUrl = await GeminiService.generateAudio(script, selectedVoice);
-
-      // 3. Generate Video (Veo 3.1)
-      setGlobalStatus(`Synthesizing Veo 3.1 Visuals for Rank #${slot.rank}...`);
-
-      // Inject Discovered Visual DNA for 100% Fidelity
-      const enrichedVideoPrompt = `${optimized.discoveredVisualDna ? `VISUAL DNA: ${optimized.discoveredVisualDna}. ` : ''}${optimized.videoPrompt}`;
-
-      const videoUrl = await GeminiService.generateVideo(
-        enrichedVideoPrompt,
-        optimized.variations[0].ambientSoundDescription,
-        AspectRatio.PORTRAIT,
-        (status) => setGlobalStatus(`Veo: ${status}`),
+      // Simple video generation - just images + feature description
+      const result = await GeminiService.generateSimpleVideo(
+        slot.productName,
+        slot.description,
         slot.media.images,
-        slot.media.clips
+        (status) => setGlobalStatus(status),
+        slot.targetAudience || 'General'
       );
 
+      // Generate audio from the script
+      setGlobalStatus("Generating voiceover...");
+      const script = slot.customScript || result.script;
+      const audioUrl = await GeminiService.generateAudio(script, selectedVoice);
+
       updateSlot(slotId, {
-        customScript: script,
         generated: {
           status: 'done',
-          videoUrl,
+          videoUrl: result.videoUrl,
           audioUrl,
           script,
-          videoPrompt: enrichedVideoPrompt
+          videoPrompt: result.videoPrompt
         }
       });
-      setGlobalStatus(`Rank #${slot.rank} Completed!`);
+      setGlobalStatus(`Done! Video ready for ${slot.productName || 'product'}.`);
     } catch (err: any) {
       console.error(err);
-      updateSlot(slotId, { generated: { ...slot.generated, status: 'error', error: err.message } });
-      setGlobalStatus(`Error on Rank #${slot.rank}: ${err.message}`);
+      updateSlot(slotId, {
+        generated: {
+          ...slot.generated,
+          status: 'error',
+          error: err.message
+        }
+      });
+      setGlobalStatus(`Error: ${err.message}`);
     }
   };
 
@@ -307,12 +335,12 @@ const App: React.FC = () => {
       .sort((a, b) => b.rank - a.rank);
 
     if (activeSlots.length === 0) {
-      alert("Please select at least one rank to include in the master countdown.");
+      alert("Please select at least one box to include.");
       return;
     }
 
     if (activeSlots.some(s => s.generated.status !== 'done')) {
-      alert("Please ensure all selected ranks are generated successfully before assembly.");
+      alert("Please ensure all selected boxes are generated before assembly.");
       return;
     }
 
@@ -324,7 +352,12 @@ const App: React.FC = () => {
       let narrative = project.connectiveNarrative;
       if (!narrative) {
         const slotsForNarrative = activeSlots.map(s => ({ rank: s.rank, name: s.productName || 'Product' }));
-        narrative = await GeminiService.generateConnectiveNarrative(slotsForNarrative);
+        narrative = await GeminiService.generateConnectiveNarrative(
+          slotsForNarrative,
+          project.settings.isAffiliatePromotion,
+          project.settings.legalDisclosureText,
+          project.settings.videoType
+        );
         setProject(prev => ({ ...prev, connectiveNarrative: narrative }));
       }
 
@@ -357,7 +390,12 @@ const App: React.FC = () => {
     setGlobalStatus("Designing Narrator's Connective Flow...");
     try {
       const slotsForNarrative = activeSlots.map(s => ({ rank: s.rank, name: s.productName || 'Product' }));
-      const narrative = await GeminiService.generateConnectiveNarrative(slotsForNarrative);
+      const narrative = await GeminiService.generateConnectiveNarrative(
+        slotsForNarrative,
+        project.settings.isAffiliatePromotion,
+        project.settings.legalDisclosureText,
+        project.settings.videoType
+      );
       setProject(prev => ({ ...prev, connectiveNarrative: narrative }));
       setGlobalStatus("Seamless narrative flow established!");
     } catch (err: any) {
@@ -370,7 +408,7 @@ const App: React.FC = () => {
     if (!slot || !videoFeedback || !slot.generated.videoPrompt) return;
 
     updateSlot(slotId, { generated: { ...slot.generated, status: 'generating' } });
-    setGlobalStatus(`Refining Rank #${slot.rank} video with your feedback...`);
+    setGlobalStatus(`Refining video with your feedback...`);
 
     try {
       const videoUrl = await GeminiService.regenerateVideoWithFeedback(
@@ -395,6 +433,53 @@ const App: React.FC = () => {
       console.error(err);
       setGlobalStatus(`Refinement failed: ${err.message}`);
       updateSlot(slotId, { generated: { ...slot.generated, status: 'error', error: err.message } });
+    }
+  };
+
+  const handleDirectorScan = async (slotId: string) => {
+    const slot = project.slots.find(s => s.id === slotId);
+    if (!slot || !slot.sourceVideoUrl) {
+      alert("Please provide a valid Source Video URL first.");
+      return;
+    }
+
+    setGlobalStatus(`Director Mode: Analyzing ${slot.sourceVideoUrl} for ${slot.targetAudience} audience...`);
+
+    try {
+      const clips = await GeminiService.analyzeVideoContent(slot.sourceVideoUrl, slot.targetAudience || 'General', slot.productName || 'Product');
+
+      const newSlots: CountdownSlot[] = clips.map((clip, index) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        rank: slot.rank + index + 1,
+        productName: slot.productName,
+        description: `Feature Focus: ${clip.description}`,
+        targetAudience: slot.targetAudience,
+        customScript: clip.script,
+        productUrl: slot.productUrl,
+        media: { images: slot.media.images, clips: [] },
+        generated: {
+          status: 'idle',
+          videoPrompt: clip.visualBrief
+        },
+        category: `Director's Cut: ${clip.audience_alignment}`
+      }));
+
+      setProject(prev => {
+        const updatedSlots = [...prev.slots];
+        const currentIndex = updatedSlots.findIndex(s => s.id === slotId);
+        updatedSlots.splice(currentIndex + 1, 0, ...newSlots);
+        return {
+          ...prev,
+          slots: updatedSlots
+        };
+      });
+
+      setGlobalStatus(`Director extracted ${clips.length} features! Added to timeline.`);
+
+    } catch (err: any) {
+      console.error(err);
+      setGlobalStatus(`Director Scan Error: ${err.message}`);
+      alert(`Director's Cut Failed: ${err.message}`);
     }
   };
 
@@ -439,8 +524,25 @@ const App: React.FC = () => {
     );
   }
 
+  if (currentView === AppView.LIBRARY) {
+    return (
+      <Layout currentView={AppView.LIBRARY} onViewChange={setCurrentView} onResetKey={handleResetKey}>
+        <AssetLibrary
+          library={library}
+          onUpdateLibrary={setLibrary}
+          onImport={(slot) => {
+            importFromLibrary(slot);
+            setCurrentView(AppView.GENERATOR);
+          }}
+          onSetView={setCurrentView}
+          projectSettings={project.settings}
+        />
+      </Layout>
+    );
+  }
+
   return (
-    <Layout currentView={AppView.GENERATOR} onViewChange={() => { }} onResetKey={handleResetKey}>
+    <Layout currentView={AppView.GENERATOR} onViewChange={setCurrentView} onResetKey={handleResetKey}>
       <div className="max-w-[1600px] mx-auto pb-20 px-4">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-6">
@@ -462,25 +564,70 @@ const App: React.FC = () => {
               Reset Canvas
             </button>
             <button
-              onClick={() => setShowLibrary(true)}
+              onClick={() => setCurrentView(AppView.LIBRARY)}
               className="px-8 py-4 bg-slate-900 border border-slate-800 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-xs transition-all shadow-xl hover:scale-105 flex items-center gap-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
               The Vault
             </button>
+            <div className="h-14 w-[1px] bg-slate-800 mx-2"></div>
             <button
-              onClick={generateAllSlots}
-              className="px-8 py-4 bg-slate-900 border border-slate-700 hover:border-indigo-500 text-white rounded-2xl font-black uppercase text-xs transition-all shadow-xl hover:scale-105 active:scale-95"
+              onClick={handleResetKey}
+              className="px-4 py-4 bg-slate-950 border border-slate-800 hover:border-red-500 text-red-500/50 hover:text-red-500 rounded-2xl font-black transition-all flex items-center gap-2"
+              title="Wipe API Key (Burn Protocol)"
             >
-              Render All Boxes
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
             </button>
-            <button
-              onClick={assembleCountdown}
-              disabled={project.slots.some(s => s.generated.status !== 'done')}
-              className="px-10 py-4 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 disabled:cursor-not-allowed text-white rounded-2xl font-black uppercase text-xs transition-all shadow-2xl hover:scale-105 active:scale-95"
-            >
-              Connect to Master Reel
-            </button>
+          </div>
+        </div>
+
+        {/* Studio Compliance & Diagnostics Panel */}
+        <div className="mb-12 glass-panel p-8 rounded-[3rem] border border-slate-800 bg-slate-950/30 flex flex-wrap items-center justify-between gap-10">
+          <div className="flex flex-wrap items-center gap-10">
+            <div className="flex items-center gap-4">
+              <label className="relative inline-flex items-center cursor-pointer group">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={project.settings.isAffiliatePromotion}
+                  onChange={(e) => setProject(prev => ({ ...prev, settings: { ...prev.settings, isAffiliatePromotion: e.target.checked } }))}
+                />
+                <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600 peer-checked:after:bg-white"></div>
+                <span className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-400 transition-colors">Affiliate Mode</span>
+              </label>
+            </div>
+
+            {project.settings.isAffiliatePromotion && (
+              <div className="flex items-center gap-3 animate-in fade-in slide-in-from-left-4">
+                <span className="text-[10px] font-black text-slate-600 uppercase">Disclosure:</span>
+                <input
+                  type="text"
+                  value={project.settings.legalDisclosureText}
+                  onChange={(e) => setProject(prev => ({ ...prev, settings: { ...prev.settings, legalDisclosureText: e.target.value } }))}
+                  className="bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-[10px] font-bold text-emerald-400 uppercase outline-none focus:border-emerald-500/50 min-w-[200px]"
+                />
+              </div>
+            )}
+
+            <div className="h-4 w-[1px] bg-slate-800"></div>
+
+            <label className="relative inline-flex items-center cursor-pointer group">
+              <input
+                type="checkbox"
+                className="sr-only peer"
+                checked={project.settings.debugMode}
+                onChange={(e) => setProject(prev => ({ ...prev, settings: { ...prev.settings, debugMode: e.target.checked } }))}
+              />
+              <div className="w-11 h-6 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-slate-500 after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600 peer-checked:after:bg-white"></div>
+              <span className="ml-3 text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-400 transition-colors">Diagnostic Mode</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 rounded-full">
+              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+              <span className="text-[9px] font-black text-emerald-500 uppercase tracking-[0.2em]">Secure Engine Active</span>
+            </div>
           </div>
         </div>
 
@@ -513,46 +660,46 @@ const App: React.FC = () => {
         {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
 
-          {/* Rank Sidebar */}
+          {/* Box Sidebar */}
           <div className="lg:col-span-3 space-y-4">
             <div className="flex items-center justify-between px-4 mb-6">
-              <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Countdown Path</h2>
+              <h2 className="text-xs font-black text-slate-500 uppercase tracking-widest">Feature Boxes</h2>
               <button
                 onClick={addSlot}
                 className="w-8 h-8 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center shadow-lg transition-all"
-                title="Add New Product Rank"
+                title="Add New Box"
               >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
               </button>
             </div>
             {project.slots.map((slot) => (
               <div key={slot.id} className="relative group">
-                <button
+                <div
                   onClick={() => setActiveSlotId(slot.id)}
-                  className={`w-full p-6 rounded-[2.5rem] border transition-all text-left flex items-center gap-4 relative overflow-hidden ${activeSlotId === slot.id
+                  className={`w-full p-6 rounded-[2.5rem] border transition-all text-left flex items-center gap-4 relative overflow-hidden cursor-pointer ${activeSlotId === slot.id
                     ? 'bg-indigo-600 border-indigo-400 shadow-2xl scale-105 z-10'
                     : 'bg-slate-950 border-slate-800 hover:border-slate-600 opacity-80 hover:opacity-100'
                     } ${slot.excludeFromMaster ? 'opacity-40 grayscale' : ''}`}
                 >
                   <div className="flex flex-col gap-1 items-center">
-                    <button
+                    <div
                       onClick={(e) => { e.stopPropagation(); reorderSlot(slot.id, 'up'); }}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
+                      className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                       title="Move Up"
                     >
                       <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 15l7-7 7 7" /></svg>
-                    </button>
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg italic shadow-lg ${activeSlotId === slot.id ? 'bg-white text-indigo-950' : 'bg-slate-900 text-slate-400'
-                      }`}>
-                      #{slot.rank}
                     </div>
-                    <button
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-sm shadow-lg ${activeSlotId === slot.id ? 'bg-white text-indigo-950' : 'bg-slate-900 text-slate-400'
+                      }`}>
+                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                    </div>
+                    <div
                       onClick={(e) => { e.stopPropagation(); reorderSlot(slot.id, 'down'); }}
-                      className="p-1 hover:bg-white/10 rounded transition-colors"
+                      className="p-1 hover:bg-white/10 rounded transition-colors cursor-pointer"
                       title="Move Down"
                     >
                       <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
-                    </button>
+                    </div>
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={`text-[10px] font-black uppercase tracking-widest mb-1 ${activeSlotId === slot.id ? 'text-indigo-200' : 'text-slate-500'
@@ -566,9 +713,9 @@ const App: React.FC = () => {
                     </div>
                   </div>
 
-                  <button
+                  <div
                     onClick={(e) => { e.stopPropagation(); toggleSlotInclusion(slot.id); }}
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${slot.excludeFromMaster
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all cursor-pointer ${slot.excludeFromMaster
                       ? 'bg-slate-800 text-slate-500 hover:bg-slate-700'
                       : 'bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/40'
                       }`}
@@ -579,12 +726,12 @@ const App: React.FC = () => {
                     ) : (
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
                     )}
-                  </button>
+                  </div>
 
                   {slot.generated.status === 'generating' && (
                     <div className="absolute bottom-0 left-0 h-1 bg-white/40 animate-progress-indefinite"></div>
                   )}
-                </button>
+                </div>
                 {project.slots.length > 1 && (
                   <button
                     onClick={(e) => { e.stopPropagation(); removeSlot(slot.id); }}
@@ -601,6 +748,17 @@ const App: React.FC = () => {
               <div className="p-6 glass-panel rounded-[2.5rem] border border-pink-500/20 bg-pink-500/5 space-y-4">
                 <div className="flex justify-between items-center px-1">
                   <p className="text-[10px] font-black text-pink-400 uppercase">Connective Script</p>
+                  <select
+                    value={project.settings.videoType || 'SHOWCASE'}
+                    onChange={(e) => setProject(prev => ({ ...prev, settings: { ...prev.settings, videoType: e.target.value } }))}
+                    className="text-[9px] font-black bg-pink-500/10 border border-pink-500/20 text-pink-400 rounded-md px-2 py-1 uppercase outline-none"
+                  >
+                    <option value="SHOWCASE">Showcase</option>
+                    <option value="UNBOXING">Unboxing</option>
+                    <option value="HOW_TO">How-To Guide</option>
+                    <option value="TROUBLESHOOTING">Troubleshooting</option>
+                    <option value="COMPARISON">Comparison</option>
+                  </select>
                   <button
                     onClick={generateConnectiveNarrative}
                     className="text-[8px] font-black bg-pink-600 hover:bg-pink-500 px-2 py-1 rounded-md text-white transition-all uppercase"
@@ -611,7 +769,7 @@ const App: React.FC = () => {
                 <textarea
                   value={project.connectiveNarrative || ''}
                   onChange={(e) => setProject(prev => ({ ...prev, connectiveNarrative: e.target.value }))}
-                  placeholder="The 'glue' that connects Rank 5 down to 1..."
+                  placeholder="Optional narration that connects all clips together..."
                   rows={6}
                   className="w-full bg-slate-950/50 border border-pink-500/10 rounded-2xl px-4 py-4 text-xs font-bold text-pink-100 focus:border-pink-500/30 transition-all outline-none resize-none"
                 />
@@ -630,7 +788,7 @@ const App: React.FC = () => {
             <div className="glass-panel p-10 rounded-[4rem] border border-slate-800 shadow-2xl relative">
               <div className="flex items-center justify-between mb-10">
                 <h2 className="text-2xl font-black text-white uppercase tracking-tighter italic">
-                  Rank <span className="text-indigo-500">#{activeSlot.rank}</span> Context
+                  Box Editor
                 </h2>
                 <div className="flex gap-2">
                   <select
@@ -642,6 +800,14 @@ const App: React.FC = () => {
                     <option value="Puck">Voice: Puck (Energetic)</option>
                     <option value="Charon">Voice: Charon (Calm)</option>
                   </select>
+                  <button
+                    onClick={() => duplicateSlot(activeSlot.id)}
+                    className="px-4 py-2 bg-indigo-500/10 border border-indigo-500/20 hover:border-indigo-500/50 text-indigo-400 rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2"
+                    title="Duplicate this box for another feature"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                    Duplicate
+                  </button>
                   <button
                     onClick={() => saveToLibrary(activeSlot.id)}
                     disabled={activeSlot.generated.status !== 'done'}
@@ -686,11 +852,14 @@ const App: React.FC = () => {
                 </div>
 
                 <div className="space-y-3">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Key Selling Point (Narration Context)</label>
+                  <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest px-2 flex items-center gap-2">
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+                    Feature Focus (One Feature Per Box)
+                  </label>
                   <textarea
                     value={activeSlot.description}
                     onChange={(e) => updateSlot(activeSlot.id, { description: e.target.value })}
-                    placeholder="Why is this product in this rank? Be specific about what makes it stand out..."
+                    placeholder="Describe ONE specific feature to showcase in this 8-second clip (e.g. 'Wireless charging capability - show placing phone on pad and it starts charging instantly')"
                     rows={3}
                     className="w-full bg-slate-950 border border-slate-800 rounded-[2rem] px-6 py-5 text-xs font-bold text-slate-300 focus:border-indigo-500 transition-all outline-none resize-none"
                   />
@@ -707,14 +876,17 @@ const App: React.FC = () => {
                     </button>
                   </div>
                   <textarea
-                    value={activeSlot.customScript || ''}
                     onChange={(e) => updateSlot(activeSlot.id, { customScript: e.target.value })}
                     placeholder="Write your own script or click 'AI Generate'..."
                     rows={4}
                     className="w-full bg-slate-950/50 border border-indigo-500/10 rounded-2xl px-6 py-5 text-xs font-bold text-indigo-100 focus:border-indigo-500/50 transition-all outline-none resize-none"
                   />
-                  <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 px-2 italic">※ This script will be synthesized via Chirp 3 HD TTS.</p>
+                  <div className="flex justify-end">
+                    <p className="text-[9px] text-slate-500 italic uppercase">AI Director will use this script as a base.</p>
+                  </div>
                 </div>
+
+
 
                 <div className="space-y-3">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Reference Visuals</label>
@@ -724,6 +896,84 @@ const App: React.FC = () => {
                     onImagesSelected={(imgs) => updateSlot(activeSlot.id, { media: { ...activeSlot.media, images: imgs } })}
                     onClipsSelected={(clips) => updateSlot(activeSlot.id, { media: { ...activeSlot.media, clips: clips } })}
                   />
+                </div>
+
+                {/* YouTube Reference URLs */}
+                <div className="space-y-3 p-6 bg-red-500/5 border border-red-500/20 rounded-[2.5rem]">
+                  <div className="flex justify-between items-center mb-4 px-2">
+                    <label className="text-[10px] font-black text-red-400 uppercase tracking-widest flex items-center gap-2">
+                      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                      </svg>
+                      YouTube Reference Videos
+                    </label>
+                    <span className="text-[8px] font-black bg-red-500/10 px-2 py-0.5 rounded text-red-300">Optional Style Reference</span>
+                  </div>
+                  <p className="text-[9px] text-slate-500 font-bold px-2 mb-4">Add YouTube video URLs to help the AI understand the style, pacing, and format you want.</p>
+
+                  {/* List of added URLs */}
+                  {activeSlot.referenceYoutubeUrls && activeSlot.referenceYoutubeUrls.length > 0 && (
+                    <div className="space-y-2 mb-4">
+                      {activeSlot.referenceYoutubeUrls.map((url, index) => (
+                        <div key={index} className="flex items-center gap-2 bg-slate-950/50 rounded-xl px-4 py-3 group">
+                          <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                          </svg>
+                          <span className="text-[10px] font-bold text-red-300 truncate flex-1">{url}</span>
+                          <button
+                            onClick={() => {
+                              const newUrls = activeSlot.referenceYoutubeUrls?.filter((_, i) => i !== index) || [];
+                              updateSlot(activeSlot.id, { referenceYoutubeUrls: newUrls });
+                            }}
+                            className="w-6 h-6 rounded-full bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add new URL input */}
+                  <div className="flex gap-2">
+                    <input
+                      id={`youtube-url-input-${activeSlot.id}`}
+                      type="url"
+                      placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
+                      className="flex-1 bg-slate-950/50 border border-red-500/10 rounded-xl px-4 py-3 text-[10px] font-bold text-red-100 focus:border-red-500/50 transition-all outline-none"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          const input = e.currentTarget;
+                          const url = input.value.trim();
+                          if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+                            const currentUrls = activeSlot.referenceYoutubeUrls || [];
+                            if (!currentUrls.includes(url)) {
+                              updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
+                            }
+                            input.value = '';
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        const input = document.getElementById(`youtube-url-input-${activeSlot.id}`) as HTMLInputElement;
+                        const url = input?.value.trim();
+                        if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+                          const currentUrls = activeSlot.referenceYoutubeUrls || [];
+                          if (!currentUrls.includes(url)) {
+                            updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
+                          }
+                          input.value = '';
+                        }
+                      }}
+                      className="px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2"
+                    >
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                      Add
+                    </button>
+                  </div>
+                  <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 px-2 italic">※ The AI will analyze these videos for style, format, and pacing reference.</p>
                 </div>
 
                 <button
@@ -737,9 +987,9 @@ const App: React.FC = () => {
                       Processing Engine...
                     </>
                   ) : activeSlot.generated.status === 'done' ? (
-                    'Regenerate this specific Rank'
+                    'Regenerate Box'
                   ) : (
-                    'Initialize Rank Generation'
+                    'Generate Box'
                   )}
                 </button>
 
@@ -755,7 +1005,32 @@ const App: React.FC = () => {
 
           {/* Director's Console (Asset Preview & AI Refinement) */}
           <div className="lg:col-span-3 space-y-8">
-            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] px-4 mb-6">Program Monitor</h2>
+            <div className="flex items-center justify-between px-4 mb-6">
+              <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Program Monitor</h2>
+              {project.settings.debugMode && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-400 animate-pulse">
+                  <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
+                  DIAGNOSTIC STREAM
+                </span>
+              )}
+            </div>
+
+            {project.settings.debugMode && activeSlot.generated.debugLog && (
+              <div className="glass-panel p-6 rounded-[2rem] border border-indigo-500/20 bg-slate-950/80 font-mono text-[9px] text-indigo-300/70 space-y-1 max-h-40 overflow-y-auto animate-in slide-in-from-top-4">
+                <p className="text-white font-black mb-2 uppercase opacity-100 flex items-center justify-between">
+                  <span>Engine Forensic Logs</span>
+                  <span className="opacity-50 tracking-tighter">Box ID: {activeSlot.id}</span>
+                </p>
+                {activeSlot.generated.debugLog.map((log, i) => (
+                  <div key={i} className="flex gap-3">
+                    <span className="opacity-30">[{i}]</span>
+                    <span className={log.includes('ERROR') ? 'text-red-400' : log.includes('LEGAL') ? 'text-emerald-400' : ''}>
+                      {log}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {activeSlot.generated.status === 'done' && activeSlot.generated.videoUrl ? (
               <div className="space-y-6 animate-in fade-in scale-95 duration-500">
@@ -768,7 +1043,7 @@ const App: React.FC = () => {
                     />
                     <div className="absolute top-6 left-6 flex flex-col gap-2">
                       <span className="px-3 py-1 bg-indigo-600 text-[8px] font-black uppercase rounded-full shadow-lg">Veo 3.1 Clip</span>
-                      <span className="px-3 py-1 bg-slate-950/80 backdrop-blur-md text-[8px] font-black uppercase rounded-full border border-slate-700">Rank #{activeSlot.rank}</span>
+                      <span className="px-3 py-1 bg-slate-950/80 backdrop-blur-md text-[8px] font-black uppercase rounded-full border border-slate-700">8 sec</span>
                     </div>
                   </div>
                 </div>
@@ -815,8 +1090,8 @@ const App: React.FC = () => {
                 <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center mb-8 border border-slate-800/50 shadow-inner">
                   <svg className="w-10 h-10 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
                 </div>
-                <h3 className="text-xl font-black text-slate-500 uppercase tracking-tight italic mb-2">Monitor Signal Lost</h3>
-                <p className="text-[10px] text-slate-600 font-bold uppercase leading-relaxed max-w-[180px]">Synthesize rank to activate program monitor.</p>
+                <h3 className="text-xl font-black text-slate-500 uppercase tracking-tight italic mb-2">No Video Yet</h3>
+                <p className="text-[10px] text-slate-600 font-bold uppercase leading-relaxed max-w-[180px]">Generate a box to see the preview here.</p>
               </div>
             )}
 
@@ -864,7 +1139,7 @@ const App: React.FC = () => {
                 className={`flex-shrink-0 group/clip transition-all duration-500 relative ${activeSlotId === slot.id ? 'w-64' : 'w-24 hover:w-40'}`}
               >
                 <div className={`absolute -top-6 left-2 text-[9px] font-black tracking-widest transition-all ${activeSlotId === slot.id ? 'text-indigo-400 opacity-100 translate-y-0' : 'text-slate-600 opacity-60 translate-y-1'}`}>
-                  TRK_{(slot.rank).toString().padStart(2, '0')}
+                  {slot.id.slice(0, 4).toUpperCase()}
                 </div>
                 <div className={`h-20 w-full rounded-2xl border-2 transition-all overflow-hidden relative ${activeSlotId === slot.id ? 'border-indigo-500 bg-indigo-500/10 shadow-[0_0_30px_rgba(99,102,241,0.4)]' : 'border-slate-800 hover:border-slate-700 bg-slate-900'}`}>
                   {slot.generated.videoUrl ? (
@@ -893,85 +1168,87 @@ const App: React.FC = () => {
       </div>
 
       {/* Master Library Overlay */}
-      {showLibrary && (
-        <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex items-center justify-center p-8">
-          <div className="w-full max-w-6xl h-full max-h-[90vh] glass-panel border border-slate-800 rounded-[5rem] overflow-hidden flex flex-col shadow-2xl">
-            <div className="p-12 border-b border-slate-800 flex items-center justify-between">
-              <div>
-                <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic leading-none mb-2">Master <span className="text-indigo-500">Library</span></h2>
-                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Catalog of premium generated sequences</p>
-              </div>
-              <button
-                onClick={() => setShowLibrary(false)}
-                className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white flex items-center justify-center shadow-xl transition-all hover:rotate-90"
-              >
-                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-              {library.slots.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                  <div className="w-32 h-32 bg-slate-900 rounded-[3rem] border border-slate-800 flex items-center justify-center mb-8">
-                    <svg className="w-16 h-16 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                  </div>
-                  <h3 className="text-2xl font-black text-slate-500 uppercase italic mb-2 tracking-tight">Vault Empty</h3>
-                  <p className="text-xs text-slate-600 font-bold uppercase tracking-widest max-w-xs">Save successful generations to catalog them here for multi-project use.</p>
+      {
+        showLibrary && (
+          <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex items-center justify-center p-8">
+            <div className="w-full max-w-6xl h-full max-h-[90vh] glass-panel border border-slate-800 rounded-[5rem] overflow-hidden flex flex-col shadow-2xl">
+              <div className="p-12 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                  <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic leading-none mb-2">Master <span className="text-indigo-500">Library</span></h2>
+                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Catalog of premium generated sequences</p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {library.slots.map(slot => (
-                    <div key={slot.id} className="glass-panel p-8 rounded-[3rem] border border-slate-800 group hover:border-indigo-500/50 transition-all">
-                      <div className="aspect-[9/16] w-full rounded-[2rem] bg-slate-900 mb-6 overflow-hidden relative shadow-inner">
-                        {slot.generated.videoUrl && (
-                          <video src={slot.generated.videoUrl} className="w-full h-full object-cover" controls={false} />
-                        )}
-                        <div className="absolute inset-x-4 bottom-4 flex justify-between items-end">
-                          <span className="px-4 py-2 bg-indigo-600/90 backdrop-blur rounded-xl text-[10px] font-black text-white uppercase">UGC 4K</span>
-                          {slot.category && <span className="px-4 py-2 bg-slate-800/90 backdrop-blur rounded-xl text-[10px] font-black text-slate-300 uppercase italic">{slot.category}</span>}
+                <button
+                  onClick={() => setShowLibrary(false)}
+                  className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white flex items-center justify-center shadow-xl transition-all hover:rotate-90"
+                >
+                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
+                {library.slots.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
+                    <div className="w-32 h-32 bg-slate-900 rounded-[3rem] border border-slate-800 flex items-center justify-center mb-8">
+                      <svg className="w-16 h-16 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+                    </div>
+                    <h3 className="text-2xl font-black text-slate-500 uppercase italic mb-2 tracking-tight">Vault Empty</h3>
+                    <p className="text-xs text-slate-600 font-bold uppercase tracking-widest max-w-xs">Save successful generations to catalog them here for multi-project use.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {library.slots.map(slot => (
+                      <div key={slot.id} className="glass-panel p-8 rounded-[3rem] border border-slate-800 group hover:border-indigo-500/50 transition-all">
+                        <div className="aspect-[9/16] w-full rounded-[2rem] bg-slate-900 mb-6 overflow-hidden relative shadow-inner">
+                          {slot.generated.videoUrl && (
+                            <video src={slot.generated.videoUrl} className="w-full h-full object-cover" controls={false} />
+                          )}
+                          <div className="absolute inset-x-4 bottom-4 flex justify-between items-end">
+                            <span className="px-4 py-2 bg-indigo-600/90 backdrop-blur rounded-xl text-[10px] font-black text-white uppercase">UGC 4K</span>
+                            {slot.category && <span className="px-4 py-2 bg-slate-800/90 backdrop-blur rounded-xl text-[10px] font-black text-slate-300 uppercase italic">{slot.category}</span>}
+                          </div>
+                        </div>
+                        <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight italic truncate">{slot.productName || 'Unnamed Asset'}</h3>
+                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed mb-6 line-clamp-2">{slot.description}</p>
+
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              importFromLibrary(slot);
+                              setShowLibrary(false);
+                            }}
+                            className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all flex items-center justify-center gap-2"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
+                            Import
+                          </button>
+                          <button
+                            onClick={() => exportShort(slot.id)}
+                            className="px-6 py-4 bg-slate-950 border border-slate-800 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all"
+                            title="Export as Standalone Short"
+                          >
+                            Short
+                          </button>
                         </div>
                       </div>
-                      <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight italic truncate">{slot.productName || 'Unnamed Asset'}</h3>
-                      <p className="text-[10px] font-bold text-slate-500 leading-relaxed mb-6 line-clamp-2">{slot.description}</p>
-
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => {
-                            importFromLibrary(slot);
-                            setShowLibrary(false);
-                          }}
-                          className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all flex items-center justify-center gap-2"
-                        >
-                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                          Import
-                        </button>
-                        <button
-                          onClick={() => exportShort(slot.id)}
-                          className="px-6 py-4 bg-slate-950 border border-slate-800 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all"
-                          title="Export as Standalone Short"
-                        >
-                          Short
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="p-8 border-t border-slate-800 bg-slate-900/20 flex items-center justify-between px-12">
-              <div className="flex gap-4">
-                <div className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                  {library.slots.length} Assets Stored
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <p className="text-[8px] font-black text-slate-700 uppercase tracking-[0.3em]">Temporal Consistency Engine v3.1</p>
+
+              <div className="p-8 border-t border-slate-800 bg-slate-900/20 flex items-center justify-between px-12">
+                <div className="flex gap-4">
+                  <div className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase tracking-widest">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                    {library.slots.length} Assets Stored
+                  </div>
+                </div>
+                <p className="text-[8px] font-black text-slate-700 uppercase tracking-[0.3em]">Temporal Consistency Engine v3.1</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
-    </Layout>
+        )
+      }
+    </Layout >
   );
 };
 
