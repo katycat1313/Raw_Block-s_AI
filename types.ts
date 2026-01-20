@@ -143,6 +143,11 @@ export interface CountdownSlot {
   targetAudience?: string;
   sourceVideoUrl?: string;
   clipType?: string;
+  segment?: {
+    startTime: string; // "MM:SS"
+    endTime: string;   // "MM:SS"
+    duration: number;  // seconds
+  };
   generated: {
     videoUrl?: string;
     audioUrl?: string;

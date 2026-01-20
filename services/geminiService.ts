@@ -14,6 +14,83 @@ export class GeminiService {
     return key;
   }
 
+  private static parseGenAIResponse(text: string): any {
+    // Helper to extract the FIRST valid JSON block by balancing braces
+    const extractJSON = (str: string) => {
+      let start = -1;
+      let openChar = '';
+      let closeChar = '';
+
+      // 1. Find the first opener
+      for (let i = 0; i < str.length; i++) {
+        if (str[i] === '{') {
+          start = i;
+          openChar = '{';
+          closeChar = '}';
+          break;
+        }
+        if (str[i] === '[') {
+          start = i;
+          openChar = '[';
+          closeChar = ']';
+          break;
+        }
+      }
+
+      if (start === -1) return str; // No JSON found, try parsing raw
+
+      // 2. Scan forward to find the MATCHING closer
+      let balance = 0;
+      let inString = false;
+      let escaped = false;
+
+      for (let i = start; i < str.length; i++) {
+        const char = str[i];
+
+        if (!escaped && char === '"') {
+          inString = !inString;
+        }
+
+        if (!inString) {
+          if (char === openChar) balance++;
+          else if (char === closeChar) balance--;
+        }
+
+        if (char === '\\' && !escaped) {
+          escaped = true;
+        } else {
+          escaped = false;
+        }
+
+        if (balance === 0) {
+          // Success: Found the exact end of the first root element
+          return str.substring(start, i + 1);
+        }
+      }
+
+      // If we get here, brackets might be unbalanced or truncated.
+      // Fallback: Return from start to the very last matching closer we can find (original behavior)
+      const lastClose = str.lastIndexOf(closeChar);
+      if (lastClose > start) return str.substring(start, lastClose + 1);
+
+      return str.substring(start);
+    };
+
+    const cleanComp = extractJSON(text);
+
+    try {
+      return JSON.parse(cleanComp);
+    } catch (e) {
+      console.error("JSON Parse Error. Cleaned:", cleanComp, "Raw:", text);
+      // Try one last-ditch cleanup for common trailing commas
+      try {
+        return JSON.parse(cleanComp.replace(/,\s*([}\]])/g, '$1'));
+      } catch (e2) {
+        throw new Error("Intelligence Engine returned malformed JSON. Please try again.");
+      }
+    }
+  }
+
   private static getMimeType(base64: string): string {
     const match = base64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9.+_-]+);base64,/);
     return match ? match[1] : 'image/jpeg';
@@ -305,7 +382,7 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
         throw new Error("The AI Research Engine returned no data. This is typically due to safety filters or a temporary API outage. Try adjusting your brand description.");
       }
 
-      const raw = JSON.parse(response.text);
+      const raw = this.parseGenAIResponse(response.text);
       console.log("Research Phase Success:", raw);
 
       // Verify product extraction if URL was provided
@@ -428,7 +505,7 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
         } as any
       });
       if (!response.text) throw new Error("Empty variation response");
-      return JSON.parse(response.text) as AssetVariation;
+      return this.parseGenAIResponse(response.text) as AssetVariation;
     } catch (err: any) {
       console.error("Expansion Variation Error:", err);
       throw new Error(`Custom expansion failed: ${err.message}`);
@@ -444,37 +521,58 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
 
     // Director Persona Prompt
     const prompt = `
-      🚨 DIRECTOR MODE ACTIVATED: ANALYZE & EXTRACT CONCEPTS
+      🚨 DIRECTOR MODE: MASTER ASSET LIBRARIAN (LEGO BLOCK PROTOCOL)
       
-      SOURCE MATERIAL: ${videoUrl}
+      SOURCE CONTEXT: ${videoUrl}
       PRODUCT: ${productName}
-      TARGET AUDIENCE: ${targetAudience}
+      
+      YOUR ROLE: 
+      You are a Master Archivist for a Stock Footage Library. 
+      Your goal is to extract "UNIVERSAL LEGO BLOCKS" - clips that are so visually distinct and cleanly cut that they can be re-used in ANY context (a review, a trailer, a tutorial, or a hype reel).
 
-      YOUR MISSION:
-      You are a World-Class Film Director & Editor. Your goal is to "watch" (via research/analysis) the content at this URL and other viral videos for this product.
-      
+      THE CORE PHILOSOPHY: "FORM OVER CONTEXT"
+      Don't just extract "Step 1". Extract the **Visual Action** of Step 1.
+      - **Bad Extraction:** A clip labeled "He talks about battery." (Too vague, relies on audio).
+      - **Good Extraction:** A clip labeled "Close-up: USB-C cable clicking into port." (Visual, specific, re-usable). 
+        *I could use this clip for a "How-to" OR for a "Durability Test" OR for a "What's in the box".*
+
+      THE "METICULOUS CUT" RULE (Visual Integrity):
+      1. **CLEAN ENTRY:** The clip must start on a STABLE frame before the action begins.
+      2. **CLEAN EXIT:** The clip must end AFTER the action resolves and the frame stabilizes. 
+      3. **NO GHOSTS:** Do not cut mid-word or mid-gesture. The visual must be a complete "sentence".
+
       TASK:
-      1. Watch the video and extract the best "Lego Blocks" (short clips) that could be rearranged to create NEW, UNIQUE content.
-      2. Categorize each clip into one of these specific types:
-         - 'UNBOXING' (Opening, packaging, first impressions)
-         - 'HOW_TO' (Tutorial, setup, specific action guide)
-         - 'TROUBLESHOOTING' (Fixing common issues, maintenance)
-         - 'FEATURE_HIGHLIGHT' (Cool specific capability)
-         - 'AESTHETIC' (B-roll, beauty shots)
-      3. "EXTRACT" 4-6 distinct moments.
-      4. STRIP all identifiable people/faces. Roto-scope concept: "Floating hands" or "Product only".
+      Watch the video at ${videoUrl}.
+      Identify distinct, high-quality "Lego Blocks" (short clips 2-6 seconds).
+      For each block, provide precise START and END timestamps (MM:SS) for the cleanest cut.
+      Label it by its VISUAL CONTENT (e.g., "Macro shot of texture", "Slow pan of device"), not its story role.
       
-      OUTPUT FORMAT (JSON):
-      Return an array of "Clips":
+      CATEGORIZATION STRATEGY (For easier searching later):
+      - 'ACTION': A specific human interaction (Pushing, Sliding, Clicking, Wearing).
+      - 'DETAIL': A macro/close-up shot of a specific texture, port, or material.
+      - 'PROCESS': A sequential set of movements (Unboxing, Assembling).
+      - 'REACTION': A human emotional response (Smiling, Nodding, "Wow" face).
+      - 'ESTABLISHING': A wide shot showing the product in its environment.
+
+      OUTPUT SCHEMA (Strict JSON Array):
       [
         {
-          "description": "Visual description of the event",
-          "script": "Narrative segment matching the clip type (e.g. for How-To: 'First, press the power button...')",
-          "visualBrief": "Detailed Veo prompt. Cinematic, steady. NO FACES.",
-          "audience_alignment": "Explanation",
-          "clip_type": "UNBOXING" | "HOW_TO" | "TROUBLESHOOTING" | "FEATURE_HIGHLIGHT" | "AESTHETIC"
+          "visualBrief": "Detailed visual description of the footage itself...",
+          "description": "Short explanation of why this clip was chosen...",
+          "audience_alignment": "Analysis of who this appeals to...",
+          "script": "Voiceover line that matches this exact visual...",
+          "clip_type": "ACTION" | "DETAIL" | "PROCESS" | "REACTION" | "ESTABLISHING",
+          "start_timestamp": "MM:SS",
+          "end_timestamp": "MM:SS"
         }
       ]
+      
+      CRITICAL INSTRUCTIONS:
+      1. IGNORE narrative context. Look for VISUAL UTILITY.
+      2. If a clip is shaky or blurry, DISCARD IT.
+      3. Timestamps MUST be precise. Find the cleanest entry and exit points.
+      4. "visualBrief" should be a direct description of what we SEE, not what it means.
+      5. Extract at least 5-8 distinct clips from the source.
     `;
 
     try {
@@ -483,12 +581,41 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json"
+          responseMimeType: "application/json",
+          systemInstruction: `You are a Video Content Analyst specializing in extracting viral clips from long-form YouTube videos.
+          
+          CRITICAL LIMITATION AWARENESS:
+          You cannot "watch" the video pixels directly. You MUST rely on Textual Data found via Google Search:
+          1. VIDEO CHAPTERS/TIMESTAMPS (often in descriptions or comments).
+          2. TRANSCRIPTS/CAPTIONS (search for the text spoken).
+          3. KEY MOMENTS (indexed by Google Search).
+          
+          YOUR METHODOLOGY: ("The Anchor Strategy")
+          1. SEARCH: Perform a Google Search for "${videoUrl} transcript", "${videoUrl} chapters", and "${videoUrl} key moments".
+          2. ANCHOR: Find specific time-coded events (e.g., "0:45 Unboxing", "2:30 Drop Test").
+          3. EXPAND: Create a snippet around that anchor.
+             - If you find "Unboxing at 2:00", create a clip ~2:00 to ~2:15.
+             - If you find "Conclusion at 8:00", create a clip ~8:00 to ~8:30.
+          
+          ACCURACY RULE:
+          - If you cannot find REAL timestamp data, do NOT guess random numbers. 
+          - Instead, infer from common structures:
+            * Intro: usually 0:00 - 0:45
+            * Body 1: usually 1:00 - 2:30
+            * Verdict: usually at the end.
+          - Prefer shorter, tighter clips (3-10s) over long meandering ones.
+          
+          CLIP TYPES TO TARGET:
+          - 'ACTION': Demonstrations, tests.
+          - 'DETAIL': Close-ups (inferred).
+          - 'REACTION': Host opinions/facial expressions.
+          
+          OUTPUT JSON STRICTLY.`
         } as any
       });
 
       if (!response.text) throw new Error("Director analysis failed to return data.");
-      return JSON.parse(response.text);
+      return this.parseGenAIResponse(response.text);
     } catch (err: any) {
       console.error("Director Mode Error:", err);
       throw new Error(`Director analysis failed: ${err.message}`);
@@ -1152,5 +1279,75 @@ ${originalPrompt}`;
       console.error("Connective Narrative Error:", err);
       throw new Error(`Failed to generate connective narrative: ${err.message}`);
     }
+  }
+
+  /**
+   * GENERATE VIDEO DIRECTLY FROM PROMPT
+   * Uses the pre-optimized Visual Brief from Director Mode.
+   */
+  static async describeImage(imageBase64: string): Promise<string> {
+    const ai = this.getAI();
+    try {
+      const response = await ai.models.generateContent({
+        model: "gemini-1.5-pro",
+        contents: [{
+          role: 'user',
+          parts: [
+            { text: "Describe this product image in extreme detail, focusing on materials, colors, lighting, textures, and the product's physical appearance. This description will be used to instruct a video generation AI to recreate this exact product. Be precise and concise." },
+            { inlineData: { data: imageBase64, mimeType: "image/jpeg" } }
+          ]
+        }]
+      });
+
+      return response.text || (response.candidates?.[0]?.content?.parts?.[0]?.text || "");
+    } catch (err: any) {
+      console.error("Image Description Error:", err);
+      throw new Error(`Failed to analyze reference image: ${err.message}`);
+    }
+  }
+
+  static async generateVideoFromPrompt(
+    prompt: string,
+    onProgress: (status: string) => void
+  ): Promise<string> {
+    const ai = this.getAI();
+    onProgress("Initializing Veo Engine...");
+
+    const generateConfig: any = {
+      model: 'veo-3.1-generate-preview',
+      prompt: prompt,
+      config: {
+        numberOfVideos: 1,
+        resolution: '1080p',
+        aspectRatio: '9:16',
+        includeAudio: true // Veo generates audio too
+      }
+    };
+
+    let result = await (ai as any).models.generateVideos(generateConfig);
+
+    while (!result.done) {
+      // Poll every 5s
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      result = await (ai as any).operations.getVideosOperation({ operation: result });
+      onProgress("Rendering video assets...");
+    }
+
+    // console.log("Veo Direct Response:", JSON.stringify(result, null, 2));
+
+    const downloadLink = result.response?.generatedVideos?.[0]?.video?.uri;
+    if (!downloadLink) {
+      const rejectionReason = result.response?.generatedVideos?.[0]?.video?.rejectionReason;
+      if (rejectionReason) throw new Error(`Video rejected: ${rejectionReason}`);
+      throw new Error("No video generated.");
+    }
+
+    const apiKey = this.getAPIKey();
+    // Fetch through proxy or direct depending on environment. 
+    // For client-side blob creation:
+    const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
+    if (!videoResponse.ok) throw new Error("Failed to download generated video.");
+
+    return URL.createObjectURL(await videoResponse.blob());
   }
 }

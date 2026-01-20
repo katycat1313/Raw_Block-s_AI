@@ -25,7 +25,19 @@ const INITIAL_SLOTS: CountdownSlot[] = [{
 const App: React.FC = () => {
   const [project, setProject] = useState<CountdownProject>(() => {
     const saved = localStorage.getItem('countdown_project_v1');
-    return saved ? JSON.parse(saved) : {
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      // Data Migration / Safety Check
+      if (parsed.slots) {
+        parsed.slots = parsed.slots.map((s: any) => ({
+          ...s,
+          media: s.media || { images: [], clips: [] },
+          generated: s.generated || { status: 'idle' }
+        }));
+      }
+      return parsed;
+    }
+    return {
       id: Math.random().toString(36).substr(2, 9),
       title: 'New Product Countdown',
       slots: INITIAL_SLOTS,
@@ -33,7 +45,8 @@ const App: React.FC = () => {
       settings: {
         isAffiliatePromotion: false,
         legalDisclosureText: 'Commission Earned / #ad',
-        debugMode: false
+        debugMode: false,
+        videoType: 'SHOWCASE'
       }
     };
   });
@@ -1167,87 +1180,7 @@ const App: React.FC = () => {
         </div>
       </div>
 
-      {/* Master Library Overlay */}
-      {
-        showLibrary && (
-          <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-2xl animate-in fade-in duration-500 flex items-center justify-center p-8">
-            <div className="w-full max-w-6xl h-full max-h-[90vh] glass-panel border border-slate-800 rounded-[5rem] overflow-hidden flex flex-col shadow-2xl">
-              <div className="p-12 border-b border-slate-800 flex items-center justify-between">
-                <div>
-                  <h2 className="text-4xl font-black text-white uppercase tracking-tighter italic leading-none mb-2">Master <span className="text-indigo-500">Library</span></h2>
-                  <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest leading-none">Catalog of premium generated sequences</p>
-                </div>
-                <button
-                  onClick={() => setShowLibrary(false)}
-                  className="w-16 h-16 rounded-full bg-slate-900 border border-slate-800 hover:border-indigo-500 text-white flex items-center justify-center shadow-xl transition-all hover:rotate-90"
-                >
-                  <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
-              </div>
 
-              <div className="flex-1 overflow-y-auto p-12 custom-scrollbar">
-                {library.slots.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-center opacity-40">
-                    <div className="w-32 h-32 bg-slate-900 rounded-[3rem] border border-slate-800 flex items-center justify-center mb-8">
-                      <svg className="w-16 h-16 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-                    </div>
-                    <h3 className="text-2xl font-black text-slate-500 uppercase italic mb-2 tracking-tight">Vault Empty</h3>
-                    <p className="text-xs text-slate-600 font-bold uppercase tracking-widest max-w-xs">Save successful generations to catalog them here for multi-project use.</p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    {library.slots.map(slot => (
-                      <div key={slot.id} className="glass-panel p-8 rounded-[3rem] border border-slate-800 group hover:border-indigo-500/50 transition-all">
-                        <div className="aspect-[9/16] w-full rounded-[2rem] bg-slate-900 mb-6 overflow-hidden relative shadow-inner">
-                          {slot.generated.videoUrl && (
-                            <video src={slot.generated.videoUrl} className="w-full h-full object-cover" controls={false} />
-                          )}
-                          <div className="absolute inset-x-4 bottom-4 flex justify-between items-end">
-                            <span className="px-4 py-2 bg-indigo-600/90 backdrop-blur rounded-xl text-[10px] font-black text-white uppercase">UGC 4K</span>
-                            {slot.category && <span className="px-4 py-2 bg-slate-800/90 backdrop-blur rounded-xl text-[10px] font-black text-slate-300 uppercase italic">{slot.category}</span>}
-                          </div>
-                        </div>
-                        <h3 className="text-lg font-black text-white mb-2 uppercase tracking-tight italic truncate">{slot.productName || 'Unnamed Asset'}</h3>
-                        <p className="text-[10px] font-bold text-slate-500 leading-relaxed mb-6 line-clamp-2">{slot.description}</p>
-
-                        <div className="flex gap-3">
-                          <button
-                            onClick={() => {
-                              importFromLibrary(slot);
-                              setShowLibrary(false);
-                            }}
-                            className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all flex items-center justify-center gap-2"
-                          >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 4v16m8-8H4" /></svg>
-                            Import
-                          </button>
-                          <button
-                            onClick={() => exportShort(slot.id)}
-                            className="px-6 py-4 bg-slate-950 border border-slate-800 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all"
-                            title="Export as Standalone Short"
-                          >
-                            Short
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="p-8 border-t border-slate-800 bg-slate-900/20 flex items-center justify-between px-12">
-                <div className="flex gap-4">
-                  <div className="flex items-center gap-2 text-[8px] font-black text-slate-500 uppercase tracking-widest">
-                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
-                    {library.slots.length} Assets Stored
-                  </div>
-                </div>
-                <p className="text-[8px] font-black text-slate-700 uppercase tracking-[0.3em]">Temporal Consistency Engine v3.1</p>
-              </div>
-            </div>
-          </div>
-        )
-      }
     </Layout >
   );
 };
