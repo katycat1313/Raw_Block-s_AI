@@ -28,10 +28,17 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({ library, onUpdateLibrary, o
     const [activePreviewId, setActivePreviewId] = useState<string | null>(null);
     const [ingestCandidates, setIngestCandidates] = useState<CountdownSlot[]>([]);
 
-    // Helper to parse "MM:SS" to seconds
+    // Helper to parse "MM:SS" or string seconds to numeric seconds
     const parseTime = (timeStr?: string) => {
         if (!timeStr) return 0;
-        const parts = timeStr.split(':').map(Number);
+        // Clean string
+        const clean = timeStr.trim();
+        if (!clean.includes(':')) {
+            const seconds = Number(clean);
+            return isNaN(seconds) ? 0 : seconds;
+        }
+
+        const parts = clean.split(':').map(Number);
         if (parts.length === 2) return parts[0] * 60 + parts[1];
         if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
         return 0;
@@ -63,31 +70,44 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({ library, onUpdateLibrary, o
             const clips = await GeminiService.analyzeVideoContent(sourceVideoUrl, clipAudience, productName);
 
             // 2. Create Library Assets (Slots)
-            const newSlots: CountdownSlot[] = clips.map(clip => ({
-                id: Math.random().toString(36).substr(2, 9),
-                rank: 0, // Not ranked yet, just in library
-                productName: productName,
-                description: clip.description,
-                targetAudience: clipAudience,
-                customScript: clip.script,
-                sourceVideoUrl: sourceVideoUrl,
-                productUrl: sourceVideoUrl, // Fallback link
-                media: { images: [], clips: [] }, // No media yet, just the concept
-                segment: (clip as any).start_timestamp ? {
-                    startTime: (clip as any).start_timestamp,
-                    endTime: (clip as any).end_timestamp,
-                    duration: 0 // We can calculate this later if needed, or helper
-                } : undefined,
-                generated: {
-                    status: 'idle',
-                    videoPrompt: clip.visualBrief // The "Visual Brief" is the prompt for generation
-                },
-                category: `Director's Cut: ${clip.audience_alignment}`,
-                clipType: clip.clip_type,
-                excludeFromMaster: false
-            }));
+            const newSlots: CountdownSlot[] = clips.map(clip => {
+                const startTime = (clip as any).start_timestamp?.trim() || "";
+                const endTime = (clip as any).end_timestamp?.trim() || "";
 
-            // 3. Move to Staging Area
+                return {
+                    id: Math.random().toString(36).substr(2, 9),
+                    rank: 0, // Not ranked yet, just in library
+                    productName: productName,
+                    description: clip.description,
+                    targetAudience: clipAudience,
+                    originalContext: (clip as any).context_caption,
+                    customScript: clip.script,
+                    sourceVideoUrl: sourceVideoUrl,
+                    productUrl: sourceVideoUrl, // Fallback link
+                    media: { images: [], clips: [] }, // No media yet, just the concept
+                    segment: startTime ? {
+                        startTime: startTime,
+                        endTime: endTime,
+                        duration: parseTime(endTime) - parseTime(startTime)
+                    } : undefined,
+                    generated: {
+                        status: 'idle',
+                        videoPrompt: clip.visualBrief // The "Visual Brief" is the prompt for generation
+                    },
+                    category: `Director's Cut: ${clip.audience_alignment}`,
+                    clipType: clip.clip_type,
+                    excludeFromMaster: false
+                };
+            });
+
+            // 3. Sort by Chronological Order
+            newSlots.sort((a, b) => {
+                const startA = parseTime(a.segment?.startTime);
+                const startB = parseTime(b.segment?.startTime);
+                return startA - startB;
+            });
+
+            // 4. Move to Staging Area
             setIngestCandidates(newSlots);
             setIngestStatus(`Review required for ${clips.length} proposed clips.`);
             // Don't close ingest mode yet, switch to review view
@@ -142,7 +162,7 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({ library, onUpdateLibrary, o
             const videoUrl = await GeminiService.generateVideoFromPrompt(finalPrompt, (status) => {
                 // Optional: You could update a detailed status here if UI supported it
                 console.log(`[${slotId}] Preview Status: ${status}`);
-            });
+            }, referenceImage);
             updateSlotStatus('done', videoUrl);
         } catch (err: any) {
             console.error(err);
@@ -237,7 +257,14 @@ const AssetLibrary: React.FC<AssetLibraryProps> = ({ library, onUpdateLibrary, o
                                         </div>
 
                                         <h4 className="font-bold text-white mb-2">{candidate.clipType}</h4>
-                                        <p className="text-xs text-slate-400 mb-4">{candidate.description}</p>
+                                        <p className="text-xs text-slate-400 mb-2">{candidate.description}</p>
+
+                                        {candidate.originalContext && (
+                                            <div className="mb-4 bg-slate-800/50 p-3 rounded-lg border border-slate-700">
+                                                <p className="text-[9px] text-fuchsia-400 font-bold uppercase mb-1">Original Context</p>
+                                                <p className="text-[10px] text-slate-300 italic">"{candidate.originalContext}"</p>
+                                            </div>
+                                        )}
 
                                         <div className="flex gap-2">
                                             <button

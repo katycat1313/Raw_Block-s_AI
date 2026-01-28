@@ -1,17 +1,244 @@
-import { GoogleGenAI, Type, Modality } from "@google/genai";
+import { Type, Modality } from "@google/genai";
 import { ProductDetails, OptimizedPrompt, Platform, AspectRatio, AssetVariation } from "../types";
 
+// Types for Vertex AI Responses
+interface VertexResponse {
+  candidates?: Array<{
+    content: {
+      parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
+    };
+  }>;
+  text?: string;
+  predictions?: any[];
+  error?: any;
+  name?: string; // For Operations
+  done?: boolean;
+  response?: any;
+}
+
 export class GeminiService {
-  private static getAI() {
-    const key = localStorage.getItem('conversionflow_key');
-    if (!key) throw new Error("No API Key detected. Please connect in Factory Config.");
-    return new GoogleGenAI({ apiKey: key });
+  private static tokenCache: { token: string; projectId: string; expires: number } | null = null;
+
+  private static async getAuth() {
+    // Check cache (expires after 50 minutes to be safe)
+    if (this.tokenCache && Date.now() < this.tokenCache.expires) {
+      return { token: this.tokenCache.token, projectId: this.tokenCache.projectId };
+    }
+
+    try {
+      const res = await fetch('/api/auth/token');
+      if (!res.ok) throw new Error("Failed to fetch auth token from proxy");
+      const data = await res.json();
+
+      if (data.error) throw new Error(data.error);
+
+      this.tokenCache = {
+        token: data.token,
+        projectId: data.projectId,
+        expires: Date.now() + (50 * 60 * 1000) // Cache for 50 mins
+      };
+      return data;
+    } catch (e: any) {
+      console.error("Auth Error:", e);
+      throw new Error(`Authentication failed: ${e.message}. Ensure the proxy is running.`);
+    }
   }
 
+  private static async callVertex(model: string, method: 'generateContent' | 'predict' | 'getOp', payload?: any): Promise<any> {
+    const { token, projectId } = await this.getAuth();
+    const location = 'us-central1';
+
+    let url = '';
+
+    if (method === 'getOp') {
+      // Operation polling URL: https://us-central1-aiplatform.googleapis.com/v1beta1/{name}
+      // Payload here is just the operation name
+      url = `https://${location}-aiplatform.googleapis.com/v1beta1/${payload}`;
+    } else {
+      url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${method}`;
+    }
+
+    const response = await fetch(url, {
+      method: method === 'getOp' ? 'GET' : 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: method === 'getOp' ? undefined : JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Vertex AI Error (${response.status}): ${errText}`);
+    }
+
+    return response.json();
+  }
+
+  // Public wrapper for Agents to use
+  public static async completion(
+    prompt: string,
+    systemInstruction: string,
+    tools: any[] = [],
+    jsonMode: boolean = true
+  ): Promise<any> {
+    const ai = this.getAI();
+
+    // Vertex AI limitation: Cannot use 'responseMimeType: application/json' (Controlled Generation) combined with Google Search tool.
+    // workaround: Disable JSON enforcement at API level if search is active, but still parse manually.
+    const hasSearch = tools.some((t: any) => t.googleSearch !== undefined);
+    const mimeType = (jsonMode && !hasSearch) ? "application/json" : "text/plain";
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          tools: tools,
+          systemInstruction: systemInstruction,
+          responseMimeType: mimeType
+        } as any
+      });
+
+      if (!response.text) throw new Error("Agent completion returned no data.");
+      return jsonMode ? this.parseGenAIResponse(response.text) : response.text;
+    } catch (err: any) {
+      console.error("Agent Completion Error:", err);
+      throw err;
+    }
+  }
+
+  // Shim to match the GoogleGenAI SDK style for existing code
+  private static getAI() {
+    return {
+      models: {
+        generateContent: async (params: { model: string, contents: any[], config?: any }) => {
+          // Map SDK params to Vertex REST format
+          // SDK: systemInstruction -> REST: system_instruction
+          // SDK: config -> REST: generation_config
+          // SDK: tools -> REST: tools
+          const body: any = {
+            contents: params.contents.map(c => ({
+              role: c.role,
+              parts: c.parts.map((p: any) => p.text ? { text: p.text } : { inline_data: { mime_type: p.inlineData.mimeType, data: p.inlineData.data } })
+            }))
+          };
+
+          if (params.config) {
+            const { systemInstruction, tools, ...genConfig } = params.config;
+            if (systemInstruction) {
+              body.system_instruction = { parts: [{ text: systemInstruction }] };
+            }
+            if (tools) {
+              body.tools = tools;
+            }
+            if (Object.keys(genConfig).length > 0) {
+              body.generation_config = genConfig;
+              // Vertex specific: strict JSON mode needs different handling? usually implies response_mime_type
+              if (genConfig.responseMimeType) body.generation_config.response_mime_type = genConfig.responseMimeType;
+              if (genConfig.responseSchema) body.generation_config.response_schema = genConfig.responseSchema;
+            }
+          }
+
+          const res = await GeminiService.callVertex(params.model, 'generateContent', body);
+
+          // Map back to SDK-like response object
+          return {
+            text: res.candidates?.[0]?.content?.parts?.[0]?.text,
+            candidates: res.candidates
+          };
+        },
+        generateImages: async (params: { model: string, prompt: string, config?: any }) => {
+          // Imagen on Vertex: predict endpoint
+          // Body: { instances: [{ prompt: string }], parameters: { sampleCount, ... } }
+          const body = {
+            instances: [{ prompt: params.prompt }],
+            parameters: {
+              sampleCount: params.config?.numberOfImages || 1,
+              aspectRatio: params.config?.aspectRatio,
+              // Add other params if needed
+            }
+          };
+          const res = await GeminiService.callVertex(params.model, 'predict', body);
+
+          // Map back to SDK-like response
+          // Imagen 3/4 returns predictions: [{ bytesBase64Encoded: string, mimeType: string }]
+          const images = res.predictions?.map((p: any) => ({
+            image: { imageBytes: p.bytesBase64Encoded || p.bytes } // Handle variations
+          })) || [];
+
+          return { generatedImages: images };
+        },
+        generateVideos: async (params: { model: string, prompt: string, config?: any, image?: any }) => {
+          // Veo on Vertex: predict endpoint, returns LRO
+          const instance: any = { prompt: params.prompt };
+          if (params.image) {
+            instance.image = { bytesBase64Encoded: params.image.imageBytes, mimeType: params.image.mimeType };
+          }
+          const body = {
+            instances: [instance],
+            parameters: {
+              aspectRatio: params.config?.aspectRatio,
+              video_config: { // Veo specific
+                resolution: params.config?.resolution,
+                frame_rate: '24fps'
+              }
+            }
+          };
+
+          // NOTE: generateVideos in SDK returns an OPERATION wrapper. Here we return the raw LRO response.
+          // The calling code expects { done: boolean, error, response... } and checks via operations.getVideosOperation
+          // We need to mimic that structure.
+          const res = await GeminiService.callVertex(params.model, 'predict', body);
+
+          // res is likely an LRO reference or direct if fast? Veo is usually standard LRO.
+          // BUT: callVertex 'predict' for Veo might actually return a standard LRO { name: "projects/.../operations/..." }
+          // Actually, 'predict' is synchronous usually, but strict generation might be async.
+          // Use 'predict' for now. If it returns `name`, treat as LRO.
+
+          // Mimic the SDK "result" object
+          return {
+            done: false, // Initially false
+            name: res.name || res.metadata?.name, // Capture operation name
+            response: res // Raw response
+          };
+        }
+      },
+      operations: {
+        getVideosOperation: async (params: { operation: any }) => {
+          // Poll the operation
+          const opName = params.operation.name;
+          if (!opName) throw new Error("Invalid operation - no name returned");
+
+          const res = await GeminiService.callVertex('', 'getOp', opName);
+
+          // Check if done
+          if (res.done) {
+            // Operation complete. The result is in res.response (or res.result)
+            // Veo LRO result layout: { response: { generatedVideos: [...] } } ??
+            // Actually Vertex LRO result is usually in `response` field.
+
+            // Mapping to what the existing code expects: result.response.generatedVideos[0].video.uri
+            // We'll return the whole LRO object
+            return {
+              done: true,
+              response: res.response || res.result || res, // Pass through
+              error: res.error
+            };
+          }
+
+          return {
+            done: false,
+            name: opName
+          };
+        }
+      }
+    };
+  }
+
+  // Redundant but keeping for compatibility if referenced
   private static getAPIKey(): string {
-    const key = localStorage.getItem('conversionflow_key');
-    if (!key) throw new Error("No API Key detected. Please connect in Factory Config.");
-    return key;
+    return "BEARER_TOKEN_AUTHENTICATED";
   }
 
   private static parseGenAIResponse(text: string): any {
@@ -81,7 +308,7 @@ export class GeminiService {
     try {
       return JSON.parse(cleanComp);
     } catch (e) {
-      console.error("JSON Parse Error. Cleaned:", cleanComp, "Raw:", text);
+      console.error(`JSON Parse Error. Cleaned (len: ${cleanComp.length}):`, cleanComp, `Raw (len: ${text.length}):`, text);
       // Try one last-ditch cleanup for common trailing commas
       try {
         return JSON.parse(cleanComp.replace(/,\s*([}\]])/g, '$1'));
@@ -270,6 +497,59 @@ export class GeminiService {
         config: {
           tools: [{ googleSearch: {} }],
           systemInstruction: `You are a World-Class Conversion Psychologist, Trend Analyst, and Viral Marketing Strategist with access to real-time 2026 data. You ONLY speak in JSON.
+          
+          STRICT JSON OUTPUT FORMAT REQUIRED:
+          {
+            "extractedProductName": "string (The EXACT product name)",
+            "videoPrompt": "string",
+            "imagePrompt": "string",
+            "hook": "string",
+            "audioScript": "string",
+            "conversionStrategy": "string",
+            "visualBrief": "string",
+            "psychologicalAngle": "string",
+            "conversionScore": number,
+            "researchData": {
+              "painPoints": ["string"],
+              "competitorWeakness": ["string"],
+              "winningHookPatterns": ["string"],
+              "sentimentScore": number,
+              "buyerIntentSignals": ["string"]
+            },
+            "triggers": ["string"],
+            "variations": [
+              {
+                "id": "string",
+                "label": "string",
+                "description": "string",
+                "videoPrompt": "string",
+                "imagePrompt": "string",
+                "audioScript": "string",
+                "ambientSoundDescription": "string"
+              }
+            ],
+            "launchCalendar": [
+              {
+                "day": "string",
+                "platform": "string",
+                "contentLabel": "string",
+                "strategicGoal": "string",
+                "hookType": "string",
+                "optimalTime": "string"
+              }
+            ],
+            "social_tiktok_caption": "string",
+            "social_tiktok_hashtags": ["string"],
+            "social_tiktok_bestTime": "string",
+            "social_youtube_caption": "string",
+            "social_youtube_hashtags": ["string"],
+            "social_youtube_bestTime": "string",
+            "social_instagram_caption": "string",
+            "social_instagram_hashtags": ["string"],
+            "social_instagram_bestTime": "string",
+            "discoveredVisualDna": "string"
+          }
+
 
 ${details.productUrl ? `
 🚨 CRITICAL FIRST STEP - PRODUCT URL VERIFICATION:
@@ -298,84 +578,9 @@ Psychological Framework: Apply Cialdini's 6 principles (Social Proof, Authority,
 
 Image/Video Instructions: ${images && images.length > 0 ? `🎯 CRITICAL: The user has uploaded ${images.length} reference image(s) of the EXACT product. When generating image/video prompts, you MUST instruct the AI to show THIS SPECIFIC product as seen in the reference images. The generated content should feature the EXACT product from the references - matching colors, shape, size, features, details precisely. ` : ''}Every visual must match the ACTUAL product appearance ${details.productUrl ? '(as seen on the product page)' : ''}${images && images.length > 0 ? ' (as seen in the uploaded reference images)' : ''}. Include trust-building elements: real hands, authentic environments, natural lighting, relatable settings. Show the product as it truly is - accurate size, color, features. Avoid stock photo vibes. Think 'my friend showing me the real product' energy.
 
-Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establish IMMEDIATE TRUST AND AUTHORITY by highlighting authentic product details. Lead with a hook, but maintain a helpful, premium, and friendly vibe. No corporate or aggressive sales speak; your goal is to be a trusted advisor who genuinely loves the product.`,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              extractedProductName: { type: Type.STRING, description: details.productUrl ? "The EXACT product name as found on the provided URL - this confirms you fetched the correct product" : "Product name" },
-              videoPrompt: { type: Type.STRING },
-              imagePrompt: { type: Type.STRING },
-              hook: { type: Type.STRING },
-              audioScript: { type: Type.STRING },
-              conversionStrategy: { type: Type.STRING },
-              visualBrief: { type: Type.STRING },
-              psychologicalAngle: { type: Type.STRING },
-              conversionScore: { type: Type.NUMBER },
-              researchData: {
-                type: Type.OBJECT,
-                properties: {
-                  painPoints: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  competitorWeakness: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  winningHookPatterns: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  sentimentScore: { type: Type.INTEGER },
-                  buyerIntentSignals: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ["painPoints", "competitorWeakness", "winningHookPatterns", "sentimentScore", "buyerIntentSignals"]
-              },
-              triggers: { type: Type.ARRAY, items: { type: Type.STRING } },
-              variations: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    id: { type: Type.STRING },
-                    label: { type: Type.STRING },
-                    description: { type: Type.STRING },
-                    videoPrompt: { type: Type.STRING },
-                    imagePrompt: { type: Type.STRING },
-                    audioScript: { type: Type.STRING },
-                    ambientSoundDescription: { type: Type.STRING }
-                  },
-                  required: ["id", "label", "description", "videoPrompt", "imagePrompt", "audioScript", "ambientSoundDescription"]
-                }
-              },
-              launchCalendar: {
-                type: Type.ARRAY,
-                items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    day: { type: Type.STRING },
-                    platform: { type: Type.STRING },
-                    contentLabel: { type: Type.STRING },
-                    strategicGoal: { type: Type.STRING },
-                    hookType: { type: Type.STRING },
-                    optimalTime: { type: Type.STRING, description: "Research-backed best posting time based on platform and 2026 trends" }
-                  },
-                  required: ["day", "platform", "contentLabel", "strategicGoal", "hookType", "optimalTime"]
-                }
-              },
-              social_tiktok_caption: { type: Type.STRING },
-              social_tiktok_hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              social_tiktok_bestTime: { type: Type.STRING, description: "Research-backed peak posting time for TikTok" },
-              social_youtube_caption: { type: Type.STRING },
-              social_youtube_hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              social_youtube_bestTime: { type: Type.STRING, description: "Research-backed peak posting time for YouTube" },
-              social_instagram_caption: { type: Type.STRING },
-              social_instagram_hashtags: { type: Type.ARRAY, items: { type: Type.STRING } },
-              social_instagram_bestTime: { type: Type.STRING, description: "Research-backed peak posting time for Instagram" },
-              discoveredVisualDna: { type: Type.STRING, description: "Detailed visual description of the product based on discovered search clips and images to ensure 100% fidelity" }
-            },
-            required: [
-              "extractedProductName", "videoPrompt", "imagePrompt", "hook", "audioScript", "conversionStrategy",
-              "visualBrief", "psychologicalAngle", "conversionScore", "researchData", "triggers",
-              "variations", "launchCalendar", "social_tiktok_caption", "social_tiktok_hashtags", "social_tiktok_bestTime",
-              "social_youtube_caption", "social_youtube_hashtags", "social_youtube_bestTime",
-              "social_instagram_caption", "social_instagram_hashtags", "social_instagram_bestTime", "discoveredVisualDna"
-            ]
-          }
+Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establish IMMEDIATE TRUST AND AUTHORITY by highlighting authentic product details. Lead with a hook, but maintain a helpful, premium, and friendly vibe. No corporate or aggressive sales speak; your goal is to be a trusted advisor who genuinely loves the product.`
         } as any
-      });
+      } as any);
 
       if (!response.text) {
         console.error("Gemini API Error: Empty response or safety block", response);
@@ -521,58 +726,51 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
 
     // Director Persona Prompt
     const prompt = `
-      🚨 DIRECTOR MODE: MASTER ASSET LIBRARIAN (LEGO BLOCK PROTOCOL)
+      🚨 DIRECTOR MODE: FULL VIDEO SEQUENCE BREAKDOWN
       
       SOURCE CONTEXT: ${videoUrl}
       PRODUCT: ${productName}
       
       YOUR ROLE: 
-      You are a Master Archivist for a Stock Footage Library. 
-      Your goal is to extract "UNIVERSAL LEGO BLOCKS" - clips that are so visually distinct and cleanly cut that they can be re-used in ANY context (a review, a trailer, a tutorial, or a hype reel).
-
-      THE CORE PHILOSOPHY: "FORM OVER CONTEXT"
-      Don't just extract "Step 1". Extract the **Visual Action** of Step 1.
-      - **Bad Extraction:** A clip labeled "He talks about battery." (Too vague, relies on audio).
-      - **Good Extraction:** A clip labeled "Close-up: USB-C cable clicking into port." (Visual, specific, re-usable). 
-        *I could use this clip for a "How-to" OR for a "Durability Test" OR for a "What's in the box".*
-
-      THE "METICULOUS CUT" RULE (Visual Integrity):
-      1. **CLEAN ENTRY:** The clip must start on a STABLE frame before the action begins.
-      2. **CLEAN EXIT:** The clip must end AFTER the action resolves and the frame stabilizes. 
-      3. **NO GHOSTS:** Do not cut mid-word or mid-gesture. The visual must be a complete "sentence".
-
-      TASK:
-      Watch the video at ${videoUrl}.
-      Identify distinct, high-quality "Lego Blocks" (short clips 2-6 seconds).
-      For each block, provide precise START and END timestamps (MM:SS) for the cleanest cut.
-      Label it by its VISUAL CONTENT (e.g., "Macro shot of texture", "Slow pan of device"), not its story role.
+      You are a Master Video Editor & Archivist.
       
-      CATEGORIZATION STRATEGY (For easier searching later):
-      - 'ACTION': A specific human interaction (Pushing, Sliding, Clicking, Wearing).
-      - 'DETAIL': A macro/close-up shot of a specific texture, port, or material.
-      - 'PROCESS': A sequential set of movements (Unboxing, Assembling).
-      - 'REACTION': A human emotional response (Smiling, Nodding, "Wow" face).
-      - 'ESTABLISHING': A wide shot showing the product in its environment.
-
+      MANDATORY TASK:
+      Break down the ENTIRE video URL provided into a chronological list of distinct, NON-OVERLAPPING segments.
+      You must walk through the video from Start (00:00) to End.
+      
+      FOR EVERY SINGLE SCENE or STEP shown in the video, create a separate clip entry.
+      
+      CATEGORIZATION LABELS (Use these exactly):
+      - 'INTRO': The very beginning, hook, or introduction.
+      - 'UNBOXING_STEP': A specific single step in the unboxing process (e.g. "Opening the lid", "Removing the plastic").
+      - 'PROBLEM_DEMO': A segment showing a problem or struggle that the product solves.
+      - 'SOLUTION_ACTION': The specific moment the product solves the problem.
+      - 'FEATURE_HIGHLIGHT': A focused look at a specific feature (e.g. "Close up of the button", "Showing the port").
+      - 'OUTRO': The final verdict, call to action, or ending.
+      
+      CRITICAL RULES:
+      1. **NO OVERLAPS:** If Clip 1 ends at 00:15, Clip 2 CANNOT start before 00:15.
+      2. **GRANULARITY:** Do not group "Unboxing" into one big 2-minute clip. Break it down: "Box Front" (5s), "Opening Lid" (3s), "Taking out manual" (4s).
+      3. **COA (Content of Action):** "visualBrief" must describe exactly what visual action happens (e.g., "Hands peeling off the protective film").
+      4. **SCRIPT:** Write a short, punchy, new voiceover line that *could* go over this specific clip.
+      
       OUTPUT SCHEMA (Strict JSON Array):
       [
         {
-          "visualBrief": "Detailed visual description of the footage itself...",
-          "description": "Short explanation of why this clip was chosen...",
-          "audience_alignment": "Analysis of who this appeals to...",
-          "script": "Voiceover line that matches this exact visual...",
-          "clip_type": "ACTION" | "DETAIL" | "PROCESS" | "REACTION" | "ESTABLISHING",
+          "visualBrief": "Detailed visual description of the footage (e.g., 'Close up shot of thumb pressing the power button')...",
+          "context_caption": "What is happening in the original video...",
+          "script": "New AI voiceover line for this specific moment...",
+          "description": "Short label (e.g. 'Unboxing Step 1' or 'The click sound')...",
+          "audience_alignment": "Why this specific detail matters...",
+          "clip_type": "INTRO" | "UNBOXING_STEP" | "PROBLEM_DEMO" | "SOLUTION_ACTION" | "FEATURE_HIGHLIGHT" | "OUTRO",
           "start_timestamp": "MM:SS",
           "end_timestamp": "MM:SS"
         }
       ]
       
-      CRITICAL INSTRUCTIONS:
-      1. IGNORE narrative context. Look for VISUAL UTILITY.
-      2. If a clip is shaky or blurry, DISCARD IT.
-      3. Timestamps MUST be precise. Find the cleanest entry and exit points.
-      4. "visualBrief" should be a direct description of what we SEE, not what it means.
-      5. Extract at least 5-8 distinct clips from the source.
+      IF YOU CANNOT FIND EXACT TIMESTAMPS via 'googleSearch' tools (transcripts/chapters), you must infer logically distinct steps based on standard video pacing for this product type, but ensure they are SEQUENTIAL and do not overlap.
+      
+      RETURN ONLY THE JSON ARRAY.
     `;
 
     try {
@@ -581,38 +779,19 @@ Language Style: Use an ENGAGING AND SWEET tone that people love to hear. Establi
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          systemInstruction: `You are a Video Content Analyst specializing in extracting viral clips from long-form YouTube videos.
+          systemInstruction: `You are a Precise Video Segmenter.
           
-          CRITICAL LIMITATION AWARENESS:
-          You cannot "watch" the video pixels directly. You MUST rely on Textual Data found via Google Search:
-          1. VIDEO CHAPTERS/TIMESTAMPS (often in descriptions or comments).
-          2. TRANSCRIPTS/CAPTIONS (search for the text spoken).
-          3. KEY MOMENTS (indexed by Google Search).
+          YOUR GOAL: Create a linear timeline of the video content.
           
-          YOUR METHODOLOGY: ("The Anchor Strategy")
-          1. SEARCH: Perform a Google Search for "${videoUrl} transcript", "${videoUrl} chapters", and "${videoUrl} key moments".
-          2. ANCHOR: Find specific time-coded events (e.g., "0:45 Unboxing", "2:30 Drop Test").
-          3. EXPAND: Create a snippet around that anchor.
-             - If you find "Unboxing at 2:00", create a clip ~2:00 to ~2:15.
-             - If you find "Conclusion at 8:00", create a clip ~8:00 to ~8:30.
+          1. SEARCH FIRST: Use googleSearch to find the video transcript and chapters for ${videoUrl}.
+          2. MAP THE TIMELINE: identifying key visual events.
+          3. BREAK IT DOWN: Turn every distinct action into a separate "Lego Block".
+          4. NO OVERLAP: Ensure end_timestamp of Clip N <= start_timestamp of Clip N+1.
+          5. COVERAGE: Try to cover the essence of the whole video, not just random parts.
           
-          ACCURACY RULE:
-          - If you cannot find REAL timestamp data, do NOT guess random numbers. 
-          - Instead, infer from common structures:
-            * Intro: usually 0:00 - 0:45
-            * Body 1: usually 1:00 - 2:30
-            * Verdict: usually at the end.
-          - Prefer shorter, tighter clips (3-10s) over long meandering ones.
-          
-          CLIP TYPES TO TARGET:
-          - 'ACTION': Demonstrations, tests.
-          - 'DETAIL': Close-ups (inferred).
-          - 'REACTION': Host opinions/facial expressions.
-          
-          OUTPUT JSON STRICTLY.`
+          Variable clip lengths are fine (2s to 30s), but keep them tightly focused on ONE specific action or feature.`
         } as any
-      });
+      } as any);
 
       if (!response.text) throw new Error("Director analysis failed to return data.");
       return this.parseGenAIResponse(response.text);
@@ -929,8 +1108,10 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
     }
 
     let result = await (ai as any).models.generateVideos(generateConfig);
+    const startTime = Date.now();
     while (!result.done) {
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (Date.now() - startTime > 180000) throw new Error("Video generation timed out (3m limit).");
+      await new Promise(resolve => setTimeout(resolve, 5000));
       result = await (ai as any).operations.getVideosOperation({ operation: result });
       onProgress("Refining product details & cinematic motion...");
     }
@@ -954,8 +1135,7 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
         throw new Error("No video URL returned from Veo generation. Check console for full API response.");
       }
     }
-    const apiKey = this.getAPIKey();
-    const response = await fetch(`${downloadLink}&key=${apiKey}`);
+    const response = await fetch(downloadLink);
     if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
     return URL.createObjectURL(await response.blob());
   }
@@ -982,11 +1162,11 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
       const analysisParts: any[] = [
         {
           text: `Look at these product images and describe:
-1. What is this product? (exact name, type, category)
-2. What does it look like? (colors, materials, size, shape, any text/logos)
-3. How would someone use it?
+1. What is this product ? (exact name, type, category)
+2. What does it look like ? (colors, materials, size, shape, any text / logos)
+3. How would someone use it ?
 
-Keep it brief - just the facts.`
+  Keep it brief - just the facts.`
         }
       ];
 
@@ -1014,26 +1194,26 @@ Keep it brief - just the facts.`
     onProgress("Creating video prompt...");
 
     // Step 2: Generate a simple video prompt
-    const videoPrompt = `8-second UGC-style product video.
-Product: ${productName || productAnalysis}
+    const videoPrompt = `8 - second UGC - style product video.
+  Product: ${productName || productAnalysis}
 Feature to showcase: ${featureDescription || 'general product overview'}
 
 Show a real person's hands naturally using/holding this product.
-Natural lighting (window light or soft indoor lighting).
-Clean, simple background (desk, table, couch).
-Smooth, subtle camera movement.
+Natural lighting(window light or soft indoor lighting).
+  Clean, simple background(desk, table, couch).
+    Smooth, subtle camera movement.
 The product must look exactly like the reference image - same colors, size, and details.`;
 
     // Step 3: Generate a simple script (15-20 words max)
-    const scriptPrompt = `Write a 15-20 word voiceover script for a product video.
-Product: ${productName}
+    const scriptPrompt = `Write a 15 - 20 word voiceover script for a product video.
+  Product: ${productName}
 Feature: ${featureDescription || 'general product overview'}
 
 Rules:
 - Conversational, not salesy
-- One clear benefit
-- No hashtags or emojis
-- End with a soft call to action
+  - One clear benefit
+    - No hashtags or emojis
+      - End with a soft call to action
 
 Just output the script, nothing else.`;
 
@@ -1071,8 +1251,10 @@ Just output the script, nothing else.`;
     }
 
     let result = await (ai as any).models.generateVideos(generateConfig);
+    const startTime = Date.now();
     while (!result.done) {
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (Date.now() - startTime > 180000) throw new Error("Video generation timed out (3m limit).");
+      await new Promise(resolve => setTimeout(resolve, 5000));
       result = await (ai as any).operations.getVideosOperation({ operation: result });
       onProgress("Rendering video...");
     }
@@ -1088,8 +1270,7 @@ Just output the script, nothing else.`;
       throw new Error("No video generated. Check console for details.");
     }
 
-    const apiKey = this.getAPIKey();
-    const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
+    const videoResponse = await fetch(downloadLink);
     if (!videoResponse.ok) throw new Error(`Failed to download video: ${videoResponse.statusText}`);
     const videoUrl = URL.createObjectURL(await videoResponse.blob());
 
@@ -1218,16 +1399,17 @@ ${originalPrompt}`;
     onProgress("Regenerating video with your feedback...");
     let result = await (ai as any).models.generateVideos(generateConfig);
 
+    const startTime = Date.now();
     while (!result.done) {
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      if (Date.now() - startTime > 180000) throw new Error("Video generation timed out (3m limit).");
+      await new Promise(resolve => setTimeout(resolve, 5000));
       result = await (ai as any).operations.getVideosOperation({ operation: result });
       onProgress("Applying corrections and validating accuracy...");
     }
 
     const downloadLink = result.response?.generatedVideos?.[0]?.video?.uri;
     if (!downloadLink) throw new Error("No video URL returned from Veo generation");
-    const apiKey = this.getAPIKey();
-    const response = await fetch(`${downloadLink}&key=${apiKey}`);
+    const response = await fetch(downloadLink);
     if (!response.ok) throw new Error(`Failed to download video: ${response.statusText}`);
     return URL.createObjectURL(await response.blob());
   }
@@ -1306,9 +1488,83 @@ ${originalPrompt}`;
     }
   }
 
+  static async curateSequence(
+    availableSlots: any[],
+    goal: string
+  ): Promise<string[]> {
+    const ai = this.getAI();
+
+    // Create a catalog for the AI
+    const catalog = availableSlots.map(s => `ID: ${s.id} | Type: ${s.clipType || 'General'} | Desc: ${s.description} | Dur: ${s.segment?.duration}s`).join('\n');
+
+    const prompt = `
+      🚨 ROLE: MASTER VIDEO EDITOR
+      
+      TASK: Select the perfect sequence of clips from the CATALOG below to build a "${goal}" video.
+      
+      CATALOG:
+      ${catalog}
+      
+      RULES:
+      1. Pick 3-6 clips that create a complete narrative arc (Hook -> Core Action -> Feature -> Payoff).
+      2. IGNORE clips that seem redundant or low quality.
+      3. ORDER MATTERS. The sequence must flow logically.
+      
+      OUTPUT:
+      Return ONLY a JSON array of Strings, representing the IDs of the selected clips in order.
+      Example: ["id_1", "id_5", "id_2"]
+    `;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: {
+          responseMimeType: "application/json"
+        } as any
+      } as any);
+
+      return this.parseGenAIResponse(response.text || "[]");
+    } catch (err: any) {
+      console.error("Auto-Curate Error:", err);
+      throw new Error("Failed to auto-curate sequence.");
+    }
+  }
+
+  static async applyStyleTransform(
+    basePrompt: string,
+    style: string
+  ): Promise<string> {
+    const ai = this.getAI();
+    const prompt = `
+      TASK: Rewrite the following video generation prompt to match a specific DIRECTORIAL STYLE.
+      
+      ORIGINAL PROMPT: "${basePrompt}"
+      TARGET STYLE/VIBE: "${style}"
+      
+      INSTRUCTIONS:
+      1. Keep the SUBJECT (product/action) exactly the same.
+      2. Change the LIGHTING, CAMERA MOVEMENT, MOOD, and AESTHETIC to match the Target Style.
+      3. Keep it under 40 words.
+      
+      OUTPUT: Just the new prompt text.
+    `;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+      return response.text?.trim() || basePrompt;
+    } catch (e) {
+      return basePrompt;
+    }
+  }
+
   static async generateVideoFromPrompt(
     prompt: string,
-    onProgress: (status: string) => void
+    onProgress: (status: string) => void,
+    imageBase64?: string | null
   ): Promise<string> {
     const ai = this.getAI();
     onProgress("Initializing Veo Engine...");
@@ -1324,10 +1580,17 @@ ${originalPrompt}`;
       }
     };
 
+    if (imageBase64) {
+      const mimeType = this.getMimeType(imageBase64);
+      const data = imageBase64.split(',')[1]; // Remove header if present
+      generateConfig.image = { imageBytes: data, mimeType: mimeType };
+    }
+
     let result = await (ai as any).models.generateVideos(generateConfig);
 
+    const startTime = Date.now();
     while (!result.done) {
-      // Poll every 5s
+      if (Date.now() - startTime > 180000) throw new Error("Video generation timed out (3m limit).");
       await new Promise(resolve => setTimeout(resolve, 5000));
       result = await (ai as any).operations.getVideosOperation({ operation: result });
       onProgress("Rendering video assets...");
@@ -1342,10 +1605,7 @@ ${originalPrompt}`;
       throw new Error("No video generated.");
     }
 
-    const apiKey = this.getAPIKey();
-    // Fetch through proxy or direct depending on environment. 
-    // For client-side blob creation:
-    const videoResponse = await fetch(`${downloadLink}&key=${apiKey}`);
+    const videoResponse = await fetch(downloadLink);
     if (!videoResponse.ok) throw new Error("Failed to download generated video.");
 
     return URL.createObjectURL(await videoResponse.blob());

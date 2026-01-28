@@ -141,6 +141,7 @@ export interface CountdownSlot {
   category?: string;
   tags?: string[];
   targetAudience?: string;
+  originalContext?: string;
   sourceVideoUrl?: string;
   clipType?: string;
   segment?: {
@@ -169,7 +170,7 @@ export interface CountdownProject {
   slots: CountdownSlot[];
   finalVideoUrl?: string;
   connectiveNarrative?: string;
-  status: 'idle' | 'assembling' | 'done' | 'error';
+  status: 'idle' | 'assembling' | 'done' | 'error' | 'agent_finished';
   settings: {
     isAffiliatePromotion: boolean;
     legalDisclosureText: string;
@@ -177,3 +178,47 @@ export interface CountdownProject {
     videoType?: string;
   };
 }
+
+// --- Agent Types ---
+
+export interface ProductDossier {
+  productName: string;
+  description: string;
+  images: string[];
+  features: string[];
+  referenceVideoUrls: string[]; // Includes the user provided one + found ones
+  visualDna: string; // "Black matte finish, silver buttons..."
+  specs: Record<string, string>;
+  reviews: string[];
+  pricePoint?: string;
+  painPoints?: string[];
+}
+
+export interface BoxConfig {
+  id: string; // Unique ID
+  type: 'INTRO' | 'UNBOXING' | 'FEATURE' | 'COMPARISON' | 'PROBLEM_SOLUTION' | 'OUTRO' | 'TESTIMONIAL' | 'AD';
+  duration: number; // estimated seconds
+  visualPrompt: string;
+  audioScript: string;
+  transition: string;
+  sourceClip?: {
+    videoUrl: string;
+    startTime: string;
+    endTime: string;
+  };
+}
+
+export interface VideoSequence {
+  title: string;
+  boxes: BoxConfig[];
+  totalDuration: number;
+  goal: string;
+  musicTrack?: string;
+}
+
+export interface AgentStatus {
+  step: 'researching' | 'strategizing' | 'directing' | 'refining' | 'production' | 'done';
+  message: string;
+  progress: number;
+}
+
