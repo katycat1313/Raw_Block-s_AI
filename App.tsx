@@ -593,7 +593,22 @@ const App: React.FC = () => {
   };
 
   // --- AGENT TEAM ORCHESTRATION ---
-  const runAgentWorkflow = async (productUrl: string, videoUrl: string) => {
+  // --- AGENT TEAM ORCHESTRATION ---
+
+  const generateVideoClips = async (slots: CountdownSlot[]) => {
+    setGlobalStatus(" PRODUCTION STARTED: Generating 8-second clips for all slots...");
+    const updatedSlots = [...slots];
+
+    for (let i = 0; i < updatedSlots.length; i++) {
+      const slot = updatedSlots[i];
+      if (slot.generated.status !== 'done') {
+        await generateSlotAssets(slot.id); // Re-uses our existing asset generation logic
+      }
+    }
+    setGlobalStatus("Production Complete! All clips generated.");
+  };
+
+  const handleDirectorIngest = async (productUrl: string, videoUrl: string) => {
     if (confirm("This will replace your current canvas with an AI-generated sequence. Continue?")) {
       setGlobalStatus("Initializing Agent Team...");
       setProject(prev => ({ ...prev, status: 'assembling', slots: [] })); // Clear slots
@@ -628,7 +643,7 @@ const App: React.FC = () => {
       // Allow the UI to settle for a split second so the user sees the slots
       const timer = setTimeout(() => {
         if (confirm(`Agent Team Mission Success!\n\n${project.slots.length} Scenes Created.\n\nStart Auto-Rendering All Videos Now?`)) {
-          generateAllSlots();
+          generateVideoClips(project.slots);
         }
         // Reset status to idle so we don't trigger again
         setProject(prev => ({ ...prev, status: 'idle' }));
@@ -726,7 +741,7 @@ const App: React.FC = () => {
                 const videoUrl = prompt("Enter Reference Video URL (YouTube/TikTok):");
                 if (!videoUrl) return;
 
-                runAgentWorkflow(productUrl, videoUrl);
+                handleDirectorIngest(productUrl, videoUrl);
               }}
               className="px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] transition-all flex items-center gap-2 shadow-2xl shadow-indigo-500/20"
             >
@@ -1368,7 +1383,7 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
-    </Layout>
+    </Layout >
   );
 };
 
