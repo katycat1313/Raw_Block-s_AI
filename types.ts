@@ -29,6 +29,12 @@ export interface SocialStrategy {
   hashtags: string[];
   firstComment: string;
   bestTime: string;
+  // Agent fields
+  targetAudience?: string;
+  videoType?: string;
+  psychologicalTriggers?: string[];
+  angle?: string;
+  sentimentAnalysis?: string;
 }
 
 export interface CalendarEntry {

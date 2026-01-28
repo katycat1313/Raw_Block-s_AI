@@ -8,6 +8,7 @@ import { ResearcherAgent } from './services/agents/ResearcherAgent';
 import { SocialMediaAgent } from './services/agents/SocialMediaAgent';
 import { DirectorAgent } from './services/agents/DirectorAgent';
 import { VideoEditorAgent } from './services/agents/VideoEditorAgent';
+import { AgentOrchestrator } from './services/agentOrchestrator';
 import {
   CountdownProject,
   CountdownSlot,
@@ -598,54 +599,13 @@ const App: React.FC = () => {
       setProject(prev => ({ ...prev, status: 'assembling', slots: [] })); // Clear slots
 
       try {
-        // 1. Researcher
-        setGlobalStatus("🕵️ Researcher Agent: Scouring the web for product data...");
-        const dossier = await ResearcherAgent.research(productUrl, videoUrl);
-        setGlobalStatus(`🕵️ Researcher: Found ${dossier.referenceVideoUrls.length} relevant videos.`);
+        const { slots, dossier, strategy } = await AgentOrchestrator.orchestrate(
+          productUrl,
+          videoUrl,
+          (status) => setGlobalStatus(status)
+        );
 
-        // 2. Social Media
-        setGlobalStatus("🧠 Social Media Agent: Analyzing trends & psychology...");
-        const strategy = await SocialMediaAgent.developStrategy(dossier);
-        setGlobalStatus(`🧠 Social Media: Strategy set - ${strategy.angle} (${strategy.videoType})`);
-
-        // 3. Director (w/ Assistant + Sound/Graphics)
-        setGlobalStatus("🎬 Director Agent: Planning full video sequence...");
-        const sequence = await DirectorAgent.produceSequence(dossier, strategy);
-        setGlobalStatus(`🎬 Director: Sequence locked. ${sequence.boxes.length} scenes planned.`);
-
-        // 4. Editor
-        setGlobalStatus("✂️ Video Editor: Cutting timeline blocks...");
-
-        // 4b. IMAGE ACQUISITION (Crucial for Visual Consistency)
-        // tailored to run in browser; requires CORS-friendly URLs or fallback to Description
-        const fetchedImages: string[] = [];
-        if (dossier.images && dossier.images.length > 0) {
-          setGlobalStatus(`🖼️ Acquiring visual assets from ${dossier.images.length} sources...`);
-          for (const imgUrl of dossier.images) {
-            try {
-              const response = await fetch(imgUrl);
-              const blob = await response.blob();
-              const reader = new FileReader();
-              const base64 = await new Promise<string>((resolve) => {
-                reader.onloadend = () => resolve(reader.result as string);
-                reader.readAsDataURL(blob);
-              });
-              fetchedImages.push(base64);
-            } catch (e) {
-              console.warn("CORS/Fetch Error for image:", imgUrl);
-              // Continue without this image
-            }
-          }
-        }
-
-        // Pass fetched images (or empty) to the calculated slots
-        const rawSlots = VideoEditorAgent.assembleTimeline(sequence, dossier.productName);
-        const slots = rawSlots.map(s => ({
-          ...s,
-          media: { ...s.media, images: fetchedImages }
-        }));
-
-        // Update Project
+        // Update Project with the Orchestrator's results
         setProject(prev => ({
           ...prev,
           title: `${dossier.productName} - ${strategy.videoType}`,
@@ -1408,8 +1368,7 @@ const App: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
-    </Layout >
+    </Layout>
   );
 };
 
