@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import Layout from './components/Layout';
 import MediaDropzone from './components/MediaDropzone';
@@ -9,12 +8,15 @@ import { SocialMediaAgent } from './services/agents/SocialMediaAgent';
 import { DirectorAgent } from './services/agents/DirectorAgent';
 import { VideoEditorAgent } from './services/agents/VideoEditorAgent';
 import { AgentOrchestrator } from './services/agentOrchestrator';
+import AgentDeployModal from './components/AgentDeployModal';
+import BoardroomMonitor from './components/BoardroomMonitor';
 import {
   CountdownProject,
   CountdownSlot,
   Platform,
   AspectRatio,
-  AppView
+  AppView,
+  DialogueEvent
 } from './types';
 
 const INITIAL_SLOTS: CountdownSlot[] = [{
@@ -84,15 +86,29 @@ const App: React.FC = () => {
 
   const [currentView, setCurrentView] = useState<AppView>(AppView.GENERATOR);
   const [activeSlotId, setActiveSlotId] = useState<string>(project.slots[0]?.id || '');
-  const [isKeySelected, setIsKeySelected] = useState(!!localStorage.getItem('conversionflow_key'));
+  const [isKeySelected, setIsKeySelected] = useState(true); // Always true for Service Account
   const [globalStatus, setGlobalStatus] = useState<string>('');
   const [selectedVoice, setSelectedVoice] = useState<'Kore' | 'Puck' | 'Charon'>('Kore');
   const [videoFeedback, setVideoFeedback] = useState('');
   const [exportedShortUrl, setExportedShortUrl] = useState<string | null>(null);
+  const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [boardroomLogs, setBoardroomLogs] = useState<DialogueEvent[]>([]);
+  const [isBoardroomVisible, setIsBoardroomVisible] = useState(false);
+  const [pendingResults, setPendingResults] = useState<{ slots: CountdownSlot[], dossier: any, strategy: any } | null>(null);
 
   useEffect(() => {
     localStorage.setItem('countdown_project_v1', JSON.stringify(project));
   }, [project]);
+
+  // Persistent Boardroom Logic
+  useEffect(() => {
+    if (project.status === 'boardroom' || project.status === 'awaiting_approval') {
+      setIsBoardroomVisible(true);
+      if (project.boardroomLog && boardroomLogs.length === 0) {
+        setBoardroomLogs(project.boardroomLog);
+      }
+    }
+  }, [project.status, project.boardroomLog]);
   useEffect(() => {
     localStorage.setItem('countdown_library_v1', JSON.stringify(library));
   }, [library]);
@@ -440,7 +456,7 @@ const App: React.FC = () => {
         setProject(prev => ({
           ...prev,
           status: 'done',
-          finalVideoUrl: activeSlots[0].generated.videoUrl // Placeholder
+          finalVideoUrl: activeSlots[0]?.generated?.videoUrl // Placeholder
         }));
         setGlobalStatus("Master Countdown Assembled!");
       }, 3000);
@@ -609,31 +625,60 @@ const App: React.FC = () => {
   };
 
   const handleDirectorIngest = async (productUrl: string, videoUrl: string) => {
-    if (confirm("This will replace your current canvas with an AI-generated sequence. Continue?")) {
-      setGlobalStatus("Initializing Agent Team...");
-      setProject(prev => ({ ...prev, status: 'assembling', slots: [] })); // Clear slots
+    setGlobalStatus("Initializing Agent Team...");
+    setProject(prev => ({ ...prev, status: 'boardroom', slots: [] }));
+    setBoardroomLogs([]);
+    setIsBoardroomVisible(true);
 
-      try {
-        const { slots, dossier, strategy } = await AgentOrchestrator.orchestrate(
-          productUrl,
-          videoUrl,
-          (status) => setGlobalStatus(status)
-        );
+    try {
+      const results = await AgentOrchestrator.orchestrate(
+        productUrl,
+        videoUrl,
+        (status) => setGlobalStatus(status),
+        (event) => {
+          const newEvent: DialogueEvent = { ...event, timestamp: Date.now() };
+          setBoardroomLogs(prev => {
+            const updated = [...prev, newEvent];
+            setProject(p => ({ ...p, boardroomLog: updated })); // Live sync to project
+            return updated;
+          });
+        }
+      );
 
-        // Update Project with the Orchestrator's results
-        setProject(prev => ({
-          ...prev,
-          title: `${dossier.productName} - ${strategy.videoType}`,
-          slots: slots,
-          status: 'agent_finished', // Special flag to trigger Effect
-          connectiveNarrative: `Strategy: ${strategy.angle}. Audience: ${strategy.targetAudience}.`
-        }));
+      setPendingResults(results);
+      setGlobalStatus("Boardroom Deliberation Complete. Awaiting Approval.");
+      setProject(prev => ({
+        ...prev,
+        status: 'awaiting_approval',
+        boardroomLog: prev.boardroomLog // Lock final log from the live updates
+      }));
 
-      } catch (err: any) {
-        console.error("Agent Team Failed:", err);
-        setGlobalStatus(`❌ Mission Failed: ${err.message}`);
-        setProject(prev => ({ ...prev, status: 'error' }));
-      }
+    } catch (err: any) {
+      console.error("Agent Team Failed:", err);
+      setGlobalStatus(`❌ Mission Failed: ${err.message}`);
+      setProject(prev => ({ ...prev, status: 'error' }));
+      setIsBoardroomVisible(false);
+    }
+  };
+
+  const handleApproveBoardroom = () => {
+    if (!pendingResults) return;
+    const { slots, dossier, strategy } = pendingResults;
+
+    setProject(prev => ({
+      ...prev,
+      title: `${dossier.productName} - ${strategy.videoType}`,
+      slots: slots,
+      status: 'idle',
+      connectiveNarrative: `Strategy: ${strategy.angle}. Audience: ${strategy.targetAudience}.`
+    }));
+
+    setIsBoardroomVisible(false);
+    setPendingResults(null);
+
+    // Auto-trigger production if approved
+    if (confirm("Storyboard Approved. Start Auto-Rendering All Videos Now?")) {
+      generateVideoClips(slots);
     }
   };
 
@@ -652,38 +697,7 @@ const App: React.FC = () => {
     }
   }, [project.status]);
 
-  if (!isKeySelected) {
-    return (
-      <Layout currentView={AppView.GENERATOR} onViewChange={() => { }} onResetKey={handleResetKey}>
-        <div className="max-w-xl mx-auto mt-20 text-center glass-panel p-12 rounded-[3rem] border-indigo-500/40 border shadow-2xl">
-          <div className="w-24 h-24 bg-indigo-600/20 rounded-full flex items-center justify-center mx-auto mb-8 animate-pulse">
-            <svg className="w-12 h-12 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-          </div>
-          <h2 className="text-4xl font-black mb-4 text-white uppercase tracking-tighter italic">Studio Offline</h2>
-          <div className="space-y-4">
-            <input
-              id="api-key-input"
-              type="password"
-              placeholder="PASTE GEMINI API KEY..."
-              className="w-full bg-slate-900 border border-slate-700 rounded-2xl px-5 py-4 text-xs font-black focus:border-indigo-500 transition-all uppercase text-white outline-none"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSelectKey((e.currentTarget as HTMLInputElement).value);
-              }}
-            />
-            <button
-              onClick={() => {
-                const input = document.getElementById('api-key-input') as HTMLInputElement;
-                if (input.value) handleSelectKey(input.value);
-              }}
-              className="w-full py-5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black transition-all mb-4 uppercase tracking-widest text-sm shadow-xl"
-            >
-              Connect Audio/Video Engine
-            </button>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  // API Key Gate Removed - Using Service Account Proxy
 
   if (currentView === AppView.LIBRARY) {
     return (
@@ -735,14 +749,7 @@ const App: React.FC = () => {
             <div className="h-14 w-[1px] bg-slate-800 mx-2"></div>
 
             <button
-              onClick={() => {
-                const productUrl = prompt("Enter Product URL (Amazon/Shopify):");
-                if (!productUrl) return;
-                const videoUrl = prompt("Enter Reference Video URL (YouTube/TikTok):");
-                if (!videoUrl) return;
-
-                handleDirectorIngest(productUrl, videoUrl);
-              }}
+              onClick={() => setIsDeployModalOpen(true)}
               className="px-6 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] transition-all flex items-center gap-2 shadow-2xl shadow-indigo-500/20"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5 5A2 2 0 009 10.172V5L8 4z" /></svg>
@@ -1086,8 +1093,8 @@ const App: React.FC = () => {
                     <div className="space-y-3">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Official Product URL</label>
                       <input
-                        value={activeSlot.productUrl || ''}
-                        onChange={(e) => updateSlot(activeSlot.id, { productUrl: e.target.value })}
+                        value={activeSlot?.productUrl || ''}
+                        onChange={(e) => activeSlot && updateSlot(activeSlot.id, { productUrl: e.target.value })}
                         placeholder="https://example.com/product..."
                         className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-xs font-bold text-blue-400 focus:border-blue-500 transition-all outline-none"
                       />
@@ -1097,8 +1104,8 @@ const App: React.FC = () => {
                       <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Product Name</label>
                         <input
-                          value={activeSlot.productName}
-                          onChange={(e) => updateSlot(activeSlot.id, { productName: e.target.value })}
+                          value={activeSlot?.productName || ''}
+                          onChange={(e) => activeSlot && updateSlot(activeSlot.id, { productName: e.target.value })}
                           placeholder="e.g. Sony WH-1000XM5"
                           className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-xs font-bold text-white focus:border-indigo-500 transition-all outline-none"
                         />
@@ -1106,8 +1113,8 @@ const App: React.FC = () => {
                       <div className="space-y-3">
                         <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Category / Bucket</label>
                         <input
-                          value={activeSlot.category || ''}
-                          onChange={(e) => updateSlot(activeSlot.id, { category: e.target.value })}
+                          value={activeSlot?.category || ''}
+                          onChange={(e) => activeSlot && updateSlot(activeSlot.id, { category: e.target.value })}
                           placeholder="e.g. Tech, Home, Viral"
                           className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-6 py-4 text-xs font-bold text-indigo-400 focus:border-indigo-500 transition-all outline-none"
                         />
@@ -1120,8 +1127,8 @@ const App: React.FC = () => {
                         Feature Focus (One Feature Per Box)
                       </label>
                       <textarea
-                        value={activeSlot.description}
-                        onChange={(e) => updateSlot(activeSlot.id, { description: e.target.value })}
+                        value={activeSlot?.description || ''}
+                        onChange={(e) => activeSlot && updateSlot(activeSlot.id, { description: e.target.value })}
                         placeholder="Describe ONE specific feature to showcase in this 8-second clip (e.g. 'Wireless charging capability - show placing phone on pad and it starts charging instantly')"
                         rows={3}
                         className="w-full bg-slate-950 border border-slate-800 rounded-[2rem] px-6 py-5 text-xs font-bold text-slate-300 focus:border-indigo-500 transition-all outline-none resize-none"
@@ -1132,15 +1139,15 @@ const App: React.FC = () => {
                       <div className="flex justify-between items-center mb-4 px-2">
                         <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Narrator Script</label>
                         <button
-                          onClick={() => generateScriptOnly(activeSlot.id)}
+                          onClick={() => activeSlot && generateScriptOnly(activeSlot.id)}
                           className="text-[9px] font-black text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1 rounded-full uppercase transition-all"
                         >
                           AI Generate Script
                         </button>
                       </div>
                       <textarea
-                        value={activeSlot.customScript || ''}
-                        onChange={(e) => updateSlot(activeSlot.id, { customScript: e.target.value })}
+                        value={activeSlot?.customScript || ''}
+                        onChange={(e) => activeSlot && updateSlot(activeSlot.id, { customScript: e.target.value })}
                         placeholder="Write your own script or click 'AI Generate'..."
                         rows={4}
                         className="w-full bg-slate-950/50 border border-indigo-500/10 rounded-2xl px-6 py-5 text-xs font-bold text-indigo-100 focus:border-indigo-500/50 transition-all outline-none resize-none"
@@ -1155,235 +1162,257 @@ const App: React.FC = () => {
                     <p className="text-[10px] opacity-50">Select a box from the timeline to edit</p>
                   </div>
                 )}
-                <p className="text-[9px] text-slate-500 italic uppercase">AI Director will use this script as a base.</p>
-              </div>
-            </div>
+                {activeSlot && (
+                  <p className="text-[9px] text-slate-500 italic uppercase">AI Director will use this script as a base.</p>
+                )}
 
 
 
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Reference Visuals</label>
-              <MediaDropzone
-                currentImages={activeSlot.media.images}
-                currentClips={activeSlot.media.clips}
-                onImagesSelected={(imgs) => updateSlot(activeSlot.id, { media: { ...activeSlot.media, images: imgs } })}
-                onClipsSelected={(clips) => updateSlot(activeSlot.id, { media: { ...activeSlot.media, clips: clips } })}
-              />
-            </div>
 
-            {/* YouTube Reference URLs */}
-            <div className="space-y-3 p-6 bg-red-500/5 border border-red-500/20 rounded-[2.5rem]">
-              <div className="flex justify-between items-center mb-4 px-2">
-                <label className="text-[10px] font-black text-red-400 uppercase tracking-widest flex items-center gap-2">
-                  <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                  </svg>
-                  YouTube Reference Videos
-                </label>
-                <span className="text-[8px] font-black bg-red-500/10 px-2 py-0.5 rounded text-red-300">Optional Style Reference</span>
-              </div>
-              <p className="text-[9px] text-slate-500 font-bold px-2 mb-4">Add YouTube video URLs to help the AI understand the style, pacing, and format you want.</p>
-
-              {/* List of added URLs */}
-              {activeSlot.referenceYoutubeUrls && activeSlot.referenceYoutubeUrls.length > 0 && (
-                <div className="space-y-2 mb-4">
-                  {activeSlot.referenceYoutubeUrls.map((url, index) => (
-                    <div key={index} className="flex items-center gap-2 bg-slate-950/50 rounded-xl px-4 py-3 group">
-                      <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
-                      </svg>
-                      <span className="text-[10px] font-bold text-red-300 truncate flex-1">{url}</span>
-                      <button
-                        onClick={() => {
-                          const newUrls = activeSlot.referenceYoutubeUrls?.filter((_, i) => i !== index) || [];
-                          updateSlot(activeSlot.id, { referenceYoutubeUrls: newUrls });
-                        }}
-                        className="w-6 h-6 rounded-full bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
-                      >
-                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
+                {activeSlot && (
+                  <>
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">Reference Visuals</label>
+                      <MediaDropzone
+                        currentImages={activeSlot?.media?.images || []}
+                        currentClips={activeSlot?.media?.clips || []}
+                        onImagesSelected={(imgs) => activeSlot && updateSlot(activeSlot.id, { media: { ...activeSlot.media, images: imgs } })}
+                        onClipsSelected={(clips) => activeSlot && updateSlot(activeSlot.id, { media: { ...activeSlot.media, clips: clips } })}
+                      />
                     </div>
-                  ))}
-                </div>
-              )}
 
-              {/* Add new URL input */}
-              <div className="flex gap-2">
-                <input
-                  id={`youtube-url-input-${activeSlot.id}`}
-                  type="url"
-                  placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
-                  className="flex-1 bg-slate-950/50 border border-red-500/10 rounded-xl px-4 py-3 text-[10px] font-bold text-red-100 focus:border-red-500/50 transition-all outline-none"
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      const input = e.currentTarget;
-                      const url = input.value.trim();
-                      if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
-                        const currentUrls = activeSlot.referenceYoutubeUrls || [];
-                        if (!currentUrls.includes(url)) {
-                          updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
-                        }
-                        input.value = '';
-                      }
-                    }
-                  }}
-                />
-                <button
-                  onClick={() => {
-                    const input = document.getElementById(`youtube-url-input-${activeSlot.id}`) as HTMLInputElement;
-                    const url = input?.value.trim();
-                    if (url && (url.includes('youtube.com') || url.includes('youtu.be'))) {
-                      const currentUrls = activeSlot.referenceYoutubeUrls || [];
-                      if (!currentUrls.includes(url)) {
-                        updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
-                      }
-                      input.value = '';
-                    }
-                  }}
-                  className="px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
-                  Add
-                </button>
+                    {/* YouTube Reference URLs */}
+                    <div className="space-y-3 p-6 bg-red-500/5 border border-red-500/20 rounded-[2.5rem]">
+                      <div className="flex justify-between items-center mb-4 px-2">
+                        <label className="text-[10px] font-black text-red-400 uppercase tracking-widest flex items-center gap-2">
+                          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                          </svg>
+                          YouTube Reference Videos
+                        </label>
+                        <span className="text-[8px] font-black bg-red-500/10 px-2 py-0.5 rounded text-red-300">Optional Style Reference</span>
+                      </div>
+                      <p className="text-[9px] text-slate-500 font-bold px-2 mb-4">Add YouTube video URLs to help the AI understand the style, pacing, and format you want.</p>
+
+                      {/* List of added URLs */}
+                      {activeSlot?.referenceYoutubeUrls && activeSlot.referenceYoutubeUrls.length > 0 && (
+                        <div className="space-y-2 mb-4">
+                          {activeSlot?.referenceYoutubeUrls?.map((url, index) => (
+                            <div key={index} className="flex items-center gap-2 bg-slate-950/50 rounded-xl px-4 py-3 group">
+                              <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+                              </svg>
+                              <span className="text-[10px] font-bold text-red-300 truncate flex-1">{url}</span>
+                              <button
+                                onClick={() => {
+                                  const newUrls = activeSlot?.referenceYoutubeUrls ? activeSlot.referenceYoutubeUrls.filter((_, i) => i !== index) : [];
+                                  activeSlot && updateSlot(activeSlot.id, { referenceYoutubeUrls: newUrls });
+                                }}
+                                className="w-6 h-6 rounded-full bg-slate-800 hover:bg-rose-600 text-slate-400 hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"
+                              >
+                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add new URL input */}
+                      <div className="flex gap-2">
+                        <input
+                          id={`youtube-url-input-${activeSlot?.id}`}
+                          type="url"
+                          placeholder="https://youtube.com/watch?v=... or https://youtu.be/..."
+                          className="flex-1 bg-slate-950/50 border border-red-500/10 rounded-xl px-4 py-3 text-[10px] font-bold text-red-100 focus:border-red-500/50 transition-all outline-none"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const input = e.currentTarget;
+                              const url = input.value.trim();
+                              if (url && (url.includes('youtube.com') || url.includes('youtu.be')) && activeSlot) {
+                                const currentUrls = activeSlot.referenceYoutubeUrls || [];
+                                if (!currentUrls.includes(url)) {
+                                  updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
+                                }
+                                input.value = '';
+                              }
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            const input = document.getElementById(`youtube-url-input-${activeSlot?.id}`) as HTMLInputElement;
+                            const url = input?.value;
+                            if (url && activeSlot && (url.includes('youtube.com') || url.includes('youtu.be'))) {
+                              const currentUrls = activeSlot.referenceYoutubeUrls || [];
+                              if (!currentUrls.includes(url)) {
+                                updateSlot(activeSlot.id, { referenceYoutubeUrls: [...currentUrls, url] });
+                              }
+                              input.value = '';
+                            }
+                          }}
+                          className="px-4 py-3 bg-red-600 hover:bg-red-500 text-white rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-2"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                          Add
+                        </button>
+                      </div>
+                      <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 px-2 italic">※ The AI will analyze these videos for style, format, and pacing reference.</p>
+                    </div>
+
+                    <button
+                      onClick={() => activeSlot && generateSlotAssets(activeSlot.id)}
+                      disabled={activeSlot?.generated?.status === 'generating'}
+                      className="w-full py-6 bg-white text-indigo-950 hover:bg-indigo-50 rounded-[2rem] font-black uppercase tracking-widest transition-all shadow-2xl flex items-center justify-center gap-4 text-sm"
+                    >
+                      {activeSlot.generated.status === 'generating' ? (
+                        <>
+                          <div className="w-5 h-5 border-4 border-indigo-950 border-t-transparent rounded-full animate-spin"></div>
+                          Processing Engine...
+                        </>
+                      ) : activeSlot.generated.status === 'done' ? (
+                        'Regenerate Box'
+                      ) : (
+                        'Generate Box'
+                      )}
+                    </button>
+
+                    {activeSlot?.generated?.error && (
+                      <div className="mt-4 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl animate-in shake duration-500">
+                        <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Engine Error</p>
+                        <p className="text-xs font-bold text-rose-200">{activeSlot.generated.error}</p>
+                      </div>
+                    )}
+
+                  </>
+                )}
               </div>
-              <p className="text-[8px] text-slate-500 font-bold uppercase mt-2 px-2 italic">※ The AI will analyze these videos for style, format, and pacing reference.</p>
+            </div>
+          </div>
+
+          {/* Director's Console (Asset Preview & AI Refinement) */}
+          <div className="lg:col-span-3 space-y-8">
+            <div className="flex items-center justify-between px-4 mb-6">
+              <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Program Monitor</h2>
+              {project.settings.debugMode && (
+                <span className="flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-400 animate-pulse">
+                  <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
+                  DIAGNOSTIC STREAM
+                </span>
+              )}
             </div>
 
-            <button
-              onClick={() => generateSlotAssets(activeSlot.id)}
-              disabled={activeSlot.generated.status === 'generating'}
-              className="w-full py-6 bg-white text-indigo-950 hover:bg-indigo-50 rounded-[2rem] font-black uppercase tracking-widest transition-all shadow-2xl flex items-center justify-center gap-4 text-sm"
-            >
-              {activeSlot.generated.status === 'generating' ? (
-                <>
-                  <div className="w-5 h-5 border-4 border-indigo-950 border-t-transparent rounded-full animate-spin"></div>
-                  Processing Engine...
-                </>
-              ) : activeSlot.generated.status === 'done' ? (
-                'Regenerate Box'
-              ) : (
-                'Generate Box'
-              )}
-            </button>
+            {project.settings.debugMode && activeSlot?.generated.debugLog && (
+              <div className="glass-panel p-6 rounded-[2rem] border border-indigo-500/20 bg-slate-950/80 font-mono text-[9px] text-indigo-300/70 space-y-1 max-h-40 overflow-y-auto animate-in slide-in-from-top-4">
+                <p className="text-white font-black mb-2 uppercase opacity-100 flex items-center justify-between">
+                  <span>Engine Forensic Logs</span>
+                  <span className="opacity-50 tracking-tighter">Box ID: {activeSlot?.id}</span>
+                </p>
+                {activeSlot?.generated.debugLog.map((log, i) => (
+                  <div key={i} className="flex gap-3">
+                    <span className="opacity-30">[{i}]</span>
+                    <span className={log.includes('ERROR') ? 'text-red-400' : log.includes('LEGAL') ? 'text-emerald-400' : ''}>
+                      {log}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {activeSlot.generated.error && (
-              <div className="p-6 bg-rose-500/10 border border-rose-500/30 rounded-2xl">
-                <p className="text-[10px] font-black text-rose-500 uppercase mb-1">Engine Error</p>
-                <p className="text-xs font-bold text-rose-200">{activeSlot.generated.error}</p>
+            {activeSlot?.generated?.status === 'done' && activeSlot?.generated?.videoUrl ? (
+              <div className="space-y-6 animate-in fade-in scale-95 duration-500">
+                <div className="glass-panel p-4 rounded-[3rem] border border-indigo-500/40 bg-slate-900 shadow-2xl overflow-hidden relative group">
+                  <div className="aspect-[9/16] rounded-[2.5rem] overflow-hidden bg-black relative">
+                    <video
+                      src={activeSlot?.generated?.videoUrl}
+                      controls
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute top-6 left-6 flex flex-col gap-2">
+                      <span className="px-3 py-1 bg-indigo-600 text-[8px] font-black uppercase rounded-full shadow-lg">Veo 3.1 Clip</span>
+                      <span className="px-3 py-1 bg-slate-950/80 backdrop-blur-md text-[8px] font-black uppercase rounded-full border border-slate-700">8 sec</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Director's Feedback Interface */}
+                <div className="glass-panel p-6 rounded-[2.5rem] border border-indigo-500/20 bg-indigo-500/5 space-y-4">
+                  <div className="flex items-center justify-between px-1">
+                    <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Director's Feedback</p>
+                    <span className="text-[8px] font-black bg-indigo-500/10 px-2 py-0.5 rounded text-indigo-300">AI Refinement</span>
+                  </div>
+                  <textarea
+                    value={videoFeedback}
+                    onChange={(e) => setVideoFeedback(e.target.value)}
+                    placeholder="Talk to the AI Editor... (e.g. 'Make the lighting more dramatic', 'Slow down the unboxing')"
+                    rows={3}
+                    className="w-full bg-slate-950/50 border border-indigo-500/10 rounded-2xl px-4 py-4 text-xs font-bold text-indigo-100 focus:border-indigo-500/30 transition-all outline-none resize-none"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => activeSlot && refineVideo(activeSlot.id)}
+                      disabled={!videoFeedback}
+                      className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all disabled:opacity-50"
+                    >
+                      Apply Fixes
+                    </button>
+                    <button
+                      onClick={() => activeSlot && exportShort(activeSlot.id)}
+                      className="px-6 py-4 bg-slate-900 border border-slate-700 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all flex items-center gap-2"
+                      title="Export as Standalone Short"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
+                      Short
+                    </button>
+                  </div>
+                </div>
+
+                <div className="glass-panel p-6 rounded-[2rem] border border-slate-800 bg-slate-900/50">
+                  <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Narration Master</p>
+                  <audio src={activeSlot?.generated?.audioUrl} controls className="w-full h-8 opacity-70" />
+                </div>
+              </div>
+            ) : (
+              <div className="h-[600px] glass-panel rounded-[3.5rem] border border-slate-800 border-dashed flex flex-col items-center justify-center text-center p-10">
+                <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center mb-8 border border-slate-800/50 shadow-inner">
+                  <svg className="w-10 h-10 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                </div>
+                <h3 className="text-xl font-black text-slate-500 uppercase tracking-tight italic mb-2">No Video Yet</h3>
+                <p className="text-[10px] text-slate-600 font-bold uppercase leading-relaxed max-w-[180px]">Generate a box to see the preview here.</p>
+              </div>
+            )}
+
+            {project.status === 'done' && project.finalVideoUrl && (
+              <div className="glass-panel p-6 rounded-[2.5rem] border border-emerald-500/50 bg-emerald-500/5 animate-in slide-in-from-bottom-8">
+                <h3 className="text-sm font-black text-emerald-500 uppercase tracking-tighter italic mb-4 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
+                  Export Ready
+                </h3>
+                <button
+                  onClick={() => window.open(project.finalVideoUrl)}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all"
+                >
+                  Download Master Reel
+                </button>
               </div>
             )}
           </div>
         </div>
       </div>
 
-      {/* Director's Console (Asset Preview & AI Refinement) */}
-      <div className="lg:col-span-3 space-y-8">
-        <div className="flex items-center justify-between px-4 mb-6">
-          <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Program Monitor</h2>
-          {project.settings.debugMode && (
-            <span className="flex items-center gap-1.5 px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 rounded text-[8px] font-black text-indigo-400 animate-pulse">
-              <span className="w-1 h-1 bg-indigo-500 rounded-full"></span>
-              DIAGNOSTIC STREAM
-            </span>
-          )}
-        </div>
+      <AgentDeployModal
+        isOpen={isDeployModalOpen}
+        onClose={() => setIsDeployModalOpen(false)}
+        onDeploy={handleDirectorIngest}
+      />
 
-        {project.settings.debugMode && activeSlot.generated.debugLog && (
-          <div className="glass-panel p-6 rounded-[2rem] border border-indigo-500/20 bg-slate-950/80 font-mono text-[9px] text-indigo-300/70 space-y-1 max-h-40 overflow-y-auto animate-in slide-in-from-top-4">
-            <p className="text-white font-black mb-2 uppercase opacity-100 flex items-center justify-between">
-              <span>Engine Forensic Logs</span>
-              <span className="opacity-50 tracking-tighter">Box ID: {activeSlot.id}</span>
-            </p>
-            {activeSlot.generated.debugLog.map((log, i) => (
-              <div key={i} className="flex gap-3">
-                <span className="opacity-30">[{i}]</span>
-                <span className={log.includes('ERROR') ? 'text-red-400' : log.includes('LEGAL') ? 'text-emerald-400' : ''}>
-                  {log}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {activeSlot.generated.status === 'done' && activeSlot.generated.videoUrl ? (
-          <div className="space-y-6 animate-in fade-in scale-95 duration-500">
-            <div className="glass-panel p-4 rounded-[3rem] border border-indigo-500/40 bg-slate-900 shadow-2xl overflow-hidden relative group">
-              <div className="aspect-[9/16] rounded-[2.5rem] overflow-hidden bg-black relative">
-                <video
-                  src={activeSlot.generated.videoUrl}
-                  controls
-                  className="w-full h-full object-cover"
-                />
-                <div className="absolute top-6 left-6 flex flex-col gap-2">
-                  <span className="px-3 py-1 bg-indigo-600 text-[8px] font-black uppercase rounded-full shadow-lg">Veo 3.1 Clip</span>
-                  <span className="px-3 py-1 bg-slate-950/80 backdrop-blur-md text-[8px] font-black uppercase rounded-full border border-slate-700">8 sec</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Director's Feedback Interface */}
-            <div className="glass-panel p-6 rounded-[2.5rem] border border-indigo-500/20 bg-indigo-500/5 space-y-4">
-              <div className="flex items-center justify-between px-1">
-                <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Director's Feedback</p>
-                <span className="text-[8px] font-black bg-indigo-500/10 px-2 py-0.5 rounded text-indigo-300">AI Refinement</span>
-              </div>
-              <textarea
-                value={videoFeedback}
-                onChange={(e) => setVideoFeedback(e.target.value)}
-                placeholder="Talk to the AI Editor... (e.g. 'Make the lighting more dramatic', 'Slow down the unboxing')"
-                rows={3}
-                className="w-full bg-slate-950/50 border border-indigo-500/10 rounded-2xl px-4 py-4 text-xs font-bold text-indigo-100 focus:border-indigo-500/30 transition-all outline-none resize-none"
-              />
-              <div className="flex gap-3">
-                <button
-                  onClick={() => refineVideo(activeSlot.id)}
-                  disabled={!videoFeedback}
-                  className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all disabled:opacity-50"
-                >
-                  Apply Fixes
-                </button>
-                <button
-                  onClick={() => exportShort(activeSlot.id)}
-                  className="px-6 py-4 bg-slate-900 border border-slate-700 hover:border-indigo-500 text-indigo-400 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all flex items-center gap-2"
-                  title="Export as Standalone Short"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                  Short
-                </button>
-              </div>
-            </div>
-
-            <div className="glass-panel p-6 rounded-[2rem] border border-slate-800 bg-slate-900/50">
-              <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-4">Narration Master</p>
-              <audio src={activeSlot.generated.audioUrl} controls className="w-full h-8 opacity-70" />
-            </div>
-          </div>
-        ) : (
-          <div className="h-[600px] glass-panel rounded-[3.5rem] border border-slate-800 border-dashed flex flex-col items-center justify-center text-center p-10">
-            <div className="w-20 h-20 bg-slate-900 rounded-[2rem] flex items-center justify-center mb-8 border border-slate-800/50 shadow-inner">
-              <svg className="w-10 h-10 text-slate-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
-            </div>
-            <h3 className="text-xl font-black text-slate-500 uppercase tracking-tight italic mb-2">No Video Yet</h3>
-            <p className="text-[10px] text-slate-600 font-bold uppercase leading-relaxed max-w-[180px]">Generate a box to see the preview here.</p>
-          </div>
-        )}
-
-        {project.status === 'done' && project.finalVideoUrl && (
-          <div className="glass-panel p-6 rounded-[2.5rem] border border-emerald-500/50 bg-emerald-500/5 animate-in slide-in-from-bottom-8">
-            <h3 className="text-sm font-black text-emerald-500 uppercase tracking-tighter italic mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              Export Ready
-            </h3>
-            <button
-              onClick={() => window.open(project.finalVideoUrl)}
-              className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all"
-            >
-              Download Master Reel
-            </button>
-          </div>
-        )}
-      </div>
-    </Layout >
+      <BoardroomMonitor
+        isOpen={isBoardroomVisible}
+        logs={boardroomLogs}
+        onClose={() => setIsBoardroomVisible(false)}
+        onApprove={handleApproveBoardroom}
+        status={globalStatus}
+      />
+    </Layout>
   );
 };
 

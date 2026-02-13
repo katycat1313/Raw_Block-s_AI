@@ -1,47 +1,52 @@
 import { GeminiService } from "../geminiService";
 import { ProductDossier } from "../../types";
+import { DIRECTOR_SKILL } from "./skills";
 
 export class DirectorAssistantAgent {
-  public static async brainstorm(dossier: ProductDossier, strategy: any): Promise<string[]> {
-    console.log(`📋 Director's Assistant: Brainstorming scenes for ${dossier.productName}...`);
+  public static async brainstorm(dossier: ProductDossier, strategy: any, directive?: any): Promise<string[]> {
+    console.log(`📋 Director's Assistant: Brainstorming modular 8-second blocks for ${dossier.productName}...`);
 
     const prompt = `
-      PROJECT DATA:
-      Product: ${dossier.productName}
-      Features: ${JSON.stringify(dossier.features)}
+      COLLECTIVE INTELLIGENCE INPUT:
+      Researcher Data: ${JSON.stringify(dossier.specs)}
       Visual DNA: ${dossier.visualDna}
-      Video Type: ${strategy.videoType}
-      Angle: ${strategy.angle}
-      Target Audience: ${strategy.targetAudience}
+      Pain Points: ${JSON.stringify(dossier.painPoints)}
+      Strategist Angle: ${strategy.angle}
+      Target Persona: ${strategy.targetAudience}
+
+      BOARDROOM DIRECTIVE (MANDATORY):
+      ${directive ? JSON.stringify(directive) : "Maintain high visual intensity and luxury feel."}
 
       TASK:
-      Create exactly 10 distinct, sequential scene concepts (Boxes).
-      CRITICAL: You must use the ACTUAL PRODUCT FEATURES in the Visual DNA. (e.g., if Visual DNA says "Silver finish", DO NOT say "Red finish").
+      Brainstorm exactly 10 independent "Video Blocks". Each block will be generated as a separate 8-second video.
       
-      The flow must be logical:
-      1. Hook (0-3s)
-      2. Problem/Intro
-      3. Feature 1 Demo (Real feature: ${dossier.features[0] || 'Key Feature'})
-      4. Feature 2 Demo (Real feature: ${dossier.features[1] || 'Secondary Feature'})
-      5. Application/UseCase
-      6. Social Proof/Testimonial
-      7. Objection Handling (Address: ${dossier.painPoints?.[0] || 'Common concern'})
-      8. Value Stack
-      9. CTA
-      10. Outro logo
+      MANDATORY BRAINSTORMING RULES:
+      1. THE STORY THREAD: Create a sequential narrative where Block 1 Hooks, Blocks 2-8 Demonstrate, Block 9 Closes, and Block 10 brands.
+      2. VISUAL DNA LOCK: Every scene MUST describe the product using the EXACT Visual DNA provided. No hallucinations.
+      3. MODULARITY: Each block must be self-contained (logical start/stop) but visually flow into the next.
+      4. DIRECTIVE ALIGNMENT: Block 1 MUST exactly match the "selectedHook" and "edits" decided in the boardroom.
+      
+      SCENE MAP:
+      - Block 1: The Pattern Interrupt Hook.
+      - Block 2: The "Pain Point" Reveal.
+      - Block 3-5: The Product Hero Shots (using Features: ${JSON.stringify(dossier.features.slice(0, 3))}).
+      - Block 6: The "Visual DNA" close-up (Macro Texture).
+      - Block 7: The Lifestyle Proof.
+      - Block 8: The Objection Handler.
+      - Block 9: The Viral Call-to-Action.
+      - Block 10: The Logo/Outro.
 
       OUTPUT JSON:
       {
+        "narrativeLogic": "Explanation of how these 10 blocks flow from the Hook to the CTA based on the Strategist's angle.",
         "scenes": [
-          "Scene 1: [Detailed concept using Visual DNA]",
+          "Block 1: [8s concept focusing on hook]",
+          "Block 2: [8s concept focusing on problem]",
           ...
         ]
       }
     `;
 
-    const instructions = "You are a specialized Assistant Director. You plan scenes based on PHYSICAL REALITY of the product.";
-
-    const result = await GeminiService.completion(prompt, instructions, [], true);
-    return result.scenes || [];
+    return await GeminiService.completion(prompt, DIRECTOR_SKILL, [], true);
   }
 }

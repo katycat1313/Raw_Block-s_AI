@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": ".."
+		}
+	],
+	"settings": {
+		"cloudcode.project": "tokyo-climate-434020-d1",
+		"geminicodeassist.codeGenerationPaneViewEnabled": true
+	}
+}

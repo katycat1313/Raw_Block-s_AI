@@ -29,7 +29,7 @@ export default defineConfig(({ mode }) => {
                 return;
               }
 
-              const files = fs.readdirSync(credsDir).filter((f: string) => f.endsWith('.json'));
+              const files = fs.readdirSync(credsDir).filter((f: string) => f.endsWith('.json') && f !== 'placeholder.json');
               if (files.length === 0) {
                 res.statusCode = 500;
                 res.end(JSON.stringify({ error: "No JSON key file found in /credentials. Please add your Service Account JSON." }));

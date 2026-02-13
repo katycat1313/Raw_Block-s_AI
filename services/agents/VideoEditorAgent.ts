@@ -16,6 +16,7 @@ export class VideoEditorAgent {
             media: { images: [], clips: [] },
             generated: {
                 status: 'idle',
+                imagePrompt: box.imagePrompt,
                 videoPrompt: box.visualPrompt,
                 script: box.audioScript
             },

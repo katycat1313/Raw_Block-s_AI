@@ -18,61 +18,129 @@ interface VertexResponse {
 
 export class GeminiService {
   private static tokenCache: { token: string; projectId: string; expires: number } | null = null;
+  private static lastRequestPromise: Promise<void> = Promise.resolve();
 
-  private static async getAuth() {
-    // Check cache (expires after 50 minutes to be safe)
+  // 🌍 High-Availability Config
+  private static readonly REGIONS = ['us-central1', 'europe-west1', 'asia-northeast1'];
+  private static currentRegionIndex = 0;
+  private static readonly MIN_GAP_BASE = 12000;
+  private static backoffPenalty = 0; // Dynamic additional wait time
+  private static readonly FALLBACK_MODEL = 'gemini-1.5-flash';
+  private static readonly PRIMARY_MODEL = 'gemini-2.0-flash-exp';
+
+  public static async getAuth() {
     if (this.tokenCache && Date.now() < this.tokenCache.expires) {
       return { token: this.tokenCache.token, projectId: this.tokenCache.projectId };
     }
-
     try {
       const res = await fetch('/api/auth/token');
       if (!res.ok) throw new Error("Failed to fetch auth token from proxy");
       const data = await res.json();
-
       if (data.error) throw new Error(data.error);
-
       this.tokenCache = {
         token: data.token,
         projectId: data.projectId,
-        expires: Date.now() + (50 * 60 * 1000) // Cache for 50 mins
+        expires: Date.now() + (50 * 60 * 1000)
       };
       return data;
     } catch (e: any) {
       console.error("Auth Error:", e);
-      throw new Error(`Authentication failed: ${e.message}. Ensure the proxy is running.`);
+      throw new Error(`Authentication failed: ${e.message}`);
     }
+  }
+
+  /**
+   * Global protective throttler shared by ALL services.
+   * Features: Atomic Queueing, Priority, Exponential Backoff with Jitter.
+   */
+  public static async protectedFetch(url: string, options: any, priority: 'user' | 'agent' = 'agent', maxRetries = 5): Promise<any> {
+    let result: any;
+    let error: any;
+
+    // 🚦 ATOMIC QUEUE: Hold the lock until the request is DONE
+    const currentPromise = this.lastRequestPromise.then(async () => {
+      // 1. Adaptive Gap: Base + User Priority + Backoff Penalty
+      const baseGap = priority === 'user' ? this.MIN_GAP_BASE / 2 : this.MIN_GAP_BASE;
+      const totalGap = baseGap + this.backoffPenalty;
+
+      if (this.backoffPenalty > 0) {
+        console.info(`[Pacing] Throttling active: Adding ${Math.round(this.backoffPenalty / 1000)}s penalty to gap.`);
+      }
+
+      await new Promise(r => setTimeout(r, totalGap));
+
+      let attempt = 0;
+      while (attempt < maxRetries) {
+        try {
+          const response = await fetch(url, options);
+
+          if (!response.ok) {
+            const errText = await response.text();
+            if (response.status === 429) {
+              // 📈 Increase penalty on 429
+              this.backoffPenalty = Math.min(this.backoffPenalty + 5000, 60000);
+
+              attempt++;
+              if (attempt < maxRetries) {
+                // 🎲 Jittered Backoff: prevents "thundering herd" pattern
+                const jitter = Math.random() * 2000;
+                const backoff = (Math.pow(2, attempt + 1) * 1000) + jitter;
+                console.warn(`[Quota Protection] 429 detected. Cooling down for ${Math.round(backoff / 1000)}s (Attempt ${attempt}/${maxRetries})...`);
+                await new Promise(r => setTimeout(r, backoff));
+                continue;
+              }
+              throw new Error("Quota Exhausted (429) after multiple retries.");
+            }
+            throw new Error(`API Error (${response.status}): ${errText}`);
+          }
+
+          result = await response.json();
+          // 📉 Decrease penalty on success
+          this.backoffPenalty = Math.max(0, this.backoffPenalty - 2000);
+          return;
+        } catch (e: any) {
+          if (attempt === maxRetries - 1 || !e.message?.includes("429")) {
+            error = e;
+            return;
+          }
+          attempt++;
+          const jitter = Math.random() * 1000;
+          await new Promise(r => setTimeout(r, (Math.pow(2, attempt) * 1000) + jitter));
+        }
+      }
+    });
+
+    this.lastRequestPromise = currentPromise.catch(() => { });
+    await currentPromise;
+
+    if (error) throw error;
+    return result;
   }
 
   private static async callVertex(model: string, method: 'generateContent' | 'predict' | 'getOp', payload?: any): Promise<any> {
     const { token, projectId } = await this.getAuth();
-    const location = 'us-central1';
+
+    // 🌍 REGIONAL ROTATION: Cycle through locations to shard quota
+    const location = this.REGIONS[this.currentRegionIndex];
+    this.currentRegionIndex = (this.currentRegionIndex + 1) % this.REGIONS.length;
 
     let url = '';
-
     if (method === 'getOp') {
-      // Operation polling URL: https://us-central1-aiplatform.googleapis.com/v1beta1/{name}
-      // Payload here is just the operation name
       url = `https://${location}-aiplatform.googleapis.com/v1beta1/${payload}`;
     } else {
       url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${method}`;
     }
 
-    const response = await fetch(url, {
+    const priority = (payload?.contents?.[0]?.parts?.[0]?.text?.length > 1000) ? 'agent' : 'user';
+
+    return await this.protectedFetch(url, {
       method: method === 'getOp' ? 'GET' : 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
       body: method === 'getOp' ? undefined : JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Vertex AI Error (${response.status}): ${errText}`);
-    }
-
-    return response.json();
+    }, priority);
   }
 
   // Public wrapper for Agents to use
@@ -89,13 +157,19 @@ export class GeminiService {
     const hasSearch = tools.some((t: any) => t.googleSearch !== undefined);
     const mimeType = (jsonMode && !hasSearch) ? "application/json" : "text/plain";
 
+    // Strength requirement for JSON if we can't enforce at API level
+    const effectiveSystemPrompt = jsonMode && hasSearch
+      ? `${systemInstruction}\n\nSTRICT REQUIREMENT: YOUR RESPONSE MUST BE A VALID JSON OBJECT. DO NOT INCLUDE ANY PREAMBLE, EXPLANATION, OR CHAT. ONLY OUTPUT RAW JSON.`
+      : systemInstruction;
+
+    // STAGE 1: Attempt Primary High-Performance Model (2.0-flash-exp)
     try {
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-exp',
+        model: this.PRIMARY_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: {
           tools: tools,
-          systemInstruction: systemInstruction,
+          systemInstruction: effectiveSystemPrompt,
           responseMimeType: mimeType
         } as any
       });
@@ -103,6 +177,24 @@ export class GeminiService {
       if (!response.text) throw new Error("Agent completion returned no data.");
       return jsonMode ? this.parseGenAIResponse(response.text) : response.text;
     } catch (err: any) {
+      if (err.message?.includes("429") || err.message?.includes("Quota")) {
+        console.warn(`[Model Fallback] Primary model (${this.PRIMARY_MODEL}) quota exceeded. Failing over to ${this.FALLBACK_MODEL}...`);
+
+        // STAGE 2: Fallback to battle-tested 1.5-flash with high quota pool
+        const fallbackResponse = await ai.models.generateContent({
+          model: this.FALLBACK_MODEL,
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          config: {
+            tools: tools,
+            systemInstruction: effectiveSystemPrompt,
+            responseMimeType: mimeType
+          } as any
+        });
+
+        if (!fallbackResponse.text) throw new Error("Fallback completion returned no data.");
+        return jsonMode ? this.parseGenAIResponse(fallbackResponse.text) : fallbackResponse.text;
+      }
+
       console.error("Agent Completion Error:", err);
       throw err;
     }
@@ -142,6 +234,10 @@ export class GeminiService {
 
           const res = await GeminiService.callVertex(params.model, 'generateContent', body);
 
+          if (!res) {
+            throw new Error("Vertex AI returned an empty response. The mission may have been interrupted or blocked.");
+          }
+
           // Map back to SDK-like response object
           return {
             text: res.candidates?.[0]?.content?.parts?.[0]?.text,
@@ -160,6 +256,10 @@ export class GeminiService {
             }
           };
           const res = await GeminiService.callVertex(params.model, 'predict', body);
+
+          if (!res) {
+            throw new Error("Imagen API returned an empty response.");
+          }
 
           // Map back to SDK-like response
           // Imagen 3/4 returns predictions: [{ bytesBase64Encoded: string, mimeType: string }]
@@ -191,10 +291,9 @@ export class GeminiService {
           // We need to mimic that structure.
           const res = await GeminiService.callVertex(params.model, 'predict', body);
 
-          // res is likely an LRO reference or direct if fast? Veo is usually standard LRO.
-          // BUT: callVertex 'predict' for Veo might actually return a standard LRO { name: "projects/.../operations/..." }
-          // Actually, 'predict' is synchronous usually, but strict generation might be async.
-          // Use 'predict' for now. If it returns `name`, treat as LRO.
+          if (!res) {
+            throw new Error("Veo API returned an empty response.");
+          }
 
           // Mimic the SDK "result" object
           return {
@@ -306,12 +405,15 @@ export class GeminiService {
     const cleanComp = extractJSON(text);
 
     try {
-      return JSON.parse(cleanComp);
+      const parsed = JSON.parse(cleanComp);
+      // 🕵️ AUTO-UNWRAP: If AI wrapped the object in an array, fix it
+      return (Array.isArray(parsed) && parsed.length === 1) ? parsed[0] : parsed;
     } catch (e) {
       console.error(`JSON Parse Error. Cleaned (len: ${cleanComp.length}):`, cleanComp, `Raw (len: ${text.length}):`, text);
       // Try one last-ditch cleanup for common trailing commas
       try {
-        return JSON.parse(cleanComp.replace(/,\s*([}\]])/g, '$1'));
+        const parsed = JSON.parse(cleanComp.replace(/,\s*([}\]])/g, '$1'));
+        return (Array.isArray(parsed) && parsed.length === 1) ? parsed[0] : parsed;
       } catch (e2) {
         throw new Error("Intelligence Engine returned malformed JSON. Please try again.");
       }
@@ -926,7 +1028,7 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
 
         // Step 2: Generate with Imagen using the detailed product-aware prompt
         const response = await ai.models.generateImages({
-          model: 'imagen-4.0-generate-001',
+          model: 'imagen-4.0-ultra-generate-001',
           prompt: detailedPrompt,
           config: {
             numberOfImages: 1,
@@ -953,7 +1055,7 @@ IMAGE GENERATION PROMPT: [Complete detailed prompt including the exact product f
 
     try {
       const response = await ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
+        model: 'imagen-4.0-ultra-generate-001',
         prompt: enhancedPrompt,
         config: {
           numberOfImages: 1,
@@ -1324,7 +1426,7 @@ ${originalPrompt}`;
       }
 
       const response = await ai.models.generateImages({
-        model: 'imagen-4.0-generate-001',
+        model: 'imagen-4.0-ultra-generate-001',
         prompt: regenerationPrompt,
         config
       });

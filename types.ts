@@ -157,9 +157,11 @@ export interface CountdownSlot {
   };
   generated: {
     videoUrl?: string;
+    imageUrl?: string; // Reference image from Imagen 4
     audioUrl?: string;
     script?: string;
-    videoPrompt?: string;
+    videoPrompt?: string; // Veo 3.1 motion prompt
+    imagePrompt?: string; // Imagen 4 static prompt
     status: 'idle' | 'generating' | 'done' | 'error';
     error?: string;
     debugLog?: string[];
@@ -170,13 +172,22 @@ export interface AssetLibrary {
   slots: CountdownSlot[];
 }
 
+export interface DialogueEvent {
+  agent: string;
+  role: string;
+  message: string;
+  type: 'thought' | 'debate' | 'prompt' | 'finding';
+  timestamp: number;
+}
+
 export interface CountdownProject {
   id: string;
   title: string;
   slots: CountdownSlot[];
   finalVideoUrl?: string;
   connectiveNarrative?: string;
-  status: 'idle' | 'assembling' | 'done' | 'error' | 'agent_finished';
+  status: 'idle' | 'assembling' | 'done' | 'error' | 'agent_finished' | 'boardroom' | 'awaiting_approval';
+  boardroomLog?: DialogueEvent[];
   settings: {
     isAffiliatePromotion: boolean;
     legalDisclosureText: string;
@@ -198,14 +209,19 @@ export interface ProductDossier {
   reviews: string[];
   pricePoint?: string;
   painPoints?: string[];
+  productUrl?: string;
 }
 
 export interface BoxConfig {
-  id: string; // Unique ID
+  id: string;
   type: 'INTRO' | 'UNBOXING' | 'FEATURE' | 'COMPARISON' | 'PROBLEM_SOLUTION' | 'OUTRO' | 'TESTIMONIAL' | 'AD';
-  duration: number; // estimated seconds
-  visualPrompt: string;
+  duration: number;
+  visualPrompt: string; // Motion prompt for Veo 3.1
+  imagePrompt: string;  // Product reference prompt for Imagen 4
   audioScript: string;
+  sfxDescription?: string;
+  lighting?: string;
+  camera?: string;
   transition: string;
   sourceClip?: {
     videoUrl: string;
