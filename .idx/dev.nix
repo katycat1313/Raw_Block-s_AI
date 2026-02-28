@@ -1,23 +1,23 @@
-{pkgs}: {
+{ pkgs, ... }: {
   channel = "stable-24.05";
   packages = [
     pkgs.nodejs
   ];
   idx.extensions = [
-    "svelte.svelte-vscode",
+    "svelte.svelte-vscode"
     "vue.volar"
   ];
   idx.previews = {
     previews = {
       web = {
         command = [
-          "npm",
-          "run",
-          "dev",
-          "--",=
-          "--port",
+          "npm"
+          "run"
+          "dev"
+          "--"
+          "--port"
           "$PORT"
-          "--host",
+          "--host"
           "0.0.0.0"
         ];
         manager = "web";

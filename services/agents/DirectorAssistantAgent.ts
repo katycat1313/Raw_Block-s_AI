@@ -3,10 +3,17 @@ import { ProductDossier } from "../../types";
 import { DIRECTOR_SKILL } from "./skills";
 
 export class DirectorAssistantAgent {
-  public static async brainstorm(dossier: ProductDossier, strategy: any, directive?: any): Promise<string[]> {
+  public static async brainstorm(
+    dossier: ProductDossier, 
+    strategy: any, 
+    directive?: any, 
+    qaFeedbackContext?: string
+  ): Promise<string[]> {
     console.log(`📋 Director's Assistant: Brainstorming modular 8-second blocks for ${dossier.productName}...`);
 
     const prompt = `
+      ${qaFeedbackContext || ''}
+
       COLLECTIVE INTELLIGENCE INPUT:
       Researcher Data: ${JSON.stringify(dossier.specs)}
       Visual DNA: ${dossier.visualDna}
