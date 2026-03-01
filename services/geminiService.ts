@@ -1,3 +1,4 @@
+ 
 import { Type } from "@google/genai";
 
 // Types for Vertex AI Responses
@@ -6,9 +7,7 @@ interface VertexResponse {
     content: {
       parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
     };
-  }>;
-  error?: any;
-}
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
 
 export class GeminiService {
   private static tokenCache: { token: string; projectId: string; expires: number } | null = null;
@@ -66,9 +65,8 @@ export class GeminiService {
     const ai = this.getAI();
     const mimeType = jsonMode ? "application/json" : "text/plain";
 
-    const PRIMARY_MODEL = 'gemini-2.0-flash-exp';
-    const FALLBACK_MODEL = 'gemini-1.5-flash';
-
+    const PRIMARY_MODEL = 'gemini-2.0-flash-001';
+const FALLBACK_MODEL = 'gemini-2.0-flash-001';
     try {
       const response = await ai.models.generateContent({
         model: PRIMARY_MODEL,
@@ -82,8 +80,8 @@ export class GeminiService {
       return jsonMode ? this.parseGenAIResponse(response.text) : response.text;
     } catch (err: any) {
       const errorMessage = err.message?.toLowerCase() || '';
-      // Check for quota (429) or internal server (500) errors to trigger fallback
-      if (errorMessage.includes('429') || errorMessage.includes('500') || errorMessage.includes('quota') || errorMessage.includes('internal')) {
+      // Check for model not found (404), quota (429) or internal server (500) errors to trigger fallback
+      if (errorMessage.includes('404') || errorMessage.includes('429') || errorMessage.includes('500') || errorMessage.includes('quota') || errorMessage.includes('internal')) {
         console.warn(`[Model Fallback] Primary model (${PRIMARY_MODEL}) failed (${err.message}). Failing over to ${FALLBACK_MODEL}...`);
 
         const fallbackResponse = await ai.models.generateContent({
