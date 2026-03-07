@@ -1,12 +1,12 @@
 import { GeminiService } from "../geminiService";
 import { ProductDossier } from "../../types";
-import { DIRECTOR_SKILL } from "./skills";
+import directorSkill from './skills/Director.md?raw';
 
 export class DirectorAssistantAgent {
   public static async brainstorm(
-    dossier: ProductDossier, 
-    strategy: any, 
-    directive?: any, 
+    dossier: ProductDossier,
+    strategy: any,
+    directive?: any,
     qaFeedbackContext?: string
   ): Promise<string[]> {
     console.log(`📋 Director's Assistant: Brainstorming modular 8-second blocks for ${dossier.productName}...`);
@@ -54,6 +54,6 @@ export class DirectorAssistantAgent {
       }
     `;
 
-    return await GeminiService.completion(prompt, DIRECTOR_SKILL, [], true);
+    return await GeminiService.completion(prompt, directorSkill, [], true);
   }
 }

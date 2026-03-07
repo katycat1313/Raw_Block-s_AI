@@ -28,7 +28,7 @@ export class AgentOrchestrator {
                 dossier: { productName: "Pending", description: "", images: [], features: [], referenceVideoUrls: [initialVideoUrl], visualDna: "", specs: {}, reviews: [], productUrl },
                 strategy: { angle: "Initial", targetAudience: "General" },
                 memory: [],
-                mission: "Revenue-Primary: Build 8-second Conversion Sequence",
+                mission: "B-Roll Library: Generate Raw Product Footage Shots",
                 sharedMemory: new SharedMemory(),
                 onDialogue: (e: any) => logDialogue(e.agent, e.role, e.message, e.type)
             };
@@ -53,7 +53,7 @@ export class AgentOrchestrator {
             const MAX_RETRIES = 3;
 
             for (let i = 0; i < MAX_RETRIES; i++) {
-                notify(`🎬 Director Agent: Architecting video blocks (Attempt ${i + 1}/${MAX_RETRIES})...`);
+                notify(`🎬 Director Agent: Designing b-roll shot library (Attempt ${i + 1}/${MAX_RETRIES})...`);
                 if (context.strategy.qaFeedback) {
                     logDialogue("Director", "Production Lead", `Reworking plan based on QA feedback: ${context.strategy.qaFeedback}`, 'debate');
                 }
@@ -61,7 +61,7 @@ export class AgentOrchestrator {
                 const director = new DirectorAgent();
                 videoPlan = await director.execute(context);
                 context.videoPlan = videoPlan;
-                logDialogue("Director", "Production Lead", `Storyboards locked. ${videoPlan.blocks.length} scenes architected. Submitting for QA.`, "thought");
+                logDialogue("Director", "Production Lead", `Shot list locked. ${videoPlan.blocks.length} b-roll moments planned. Submitting for QA.`, "thought");
 
                 try {
                     notify("🔍 QA Agent: Reviewing Director's plan for quality and brand alignment...");
@@ -91,19 +91,19 @@ export class AgentOrchestrator {
             notify("🎬 Director & 🔍 QA Loop Complete. Narrative locked.");
             // --- End Loop ---
 
-            notify("✂️ Video Editor: Cutting timeline blocks...");
+            notify("✂️ Video Editor: Assembling b-roll shot list...");
             const rawSlots = VideoEditorAgent.assembleTimeline(context.videoPlan, dossier.productName);
 
-            notify("🎨 Imagen 4: Generating unique static anchors for each block...");
+            notify("🎨 Imagen 4: Generating visual reference frames for each shot...");
             const slotsWithAssets: CountdownSlot[] = [];
 
             for (const slot of rawSlots) {
-                const blockMatch = context.videoPlan.blocks.find(b => b.visual_prompt === slot.generated.videoPrompt);
-                const imagePrompt = blockMatch?.image_prompt || slot.generated.imagePrompt;
+                const blockMatch = context.videoPlan.blocks.find(b => b.visualPrompt === slot.generated.videoPrompt);
+                const imagePrompt = blockMatch?.imagePrompt || slot.generated.imagePrompt;
 
                 if (imagePrompt) {
                     try {
-                        notify(`🎨 Imagen 4: Anchoring Block #${slot.rank}...`);
+                        notify(`🎨 Imagen 4: Generating reference frame for Shot #${slot.rank}...`);
                         const base64Image = await ImagenService.generateReferenceImage(imagePrompt);
                         slot.generated.imageUrl = base64Image;
                         slot.media.images = [base64Image];
@@ -114,7 +114,7 @@ export class AgentOrchestrator {
                 slotsWithAssets.push(slot);
             }
 
-            notify("✨ Agent Team Mission Success. Ready to Render Master Sequence.");
+            notify("✨ Agent Team Mission Complete. B-Roll Shot Library Ready.");
             return { slots: slotsWithAssets, dossier, strategy };
 
         } catch (error: any) {

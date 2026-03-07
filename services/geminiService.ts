@@ -1,14 +1,3 @@
- 
-import { Type } from "@google/genai";
-
-// Types for Vertex AI Responses
-interface VertexResponse {
-  candidates?: Array<{
-    content: {
-      parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }>;
-    };
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     
-
 export class GeminiService {
   private static tokenCache: { token: string; projectId: string; expires: number } | null = null;
 
@@ -33,7 +22,7 @@ export class GeminiService {
     }
   }
 
-  private static async callVertex(model: string, method: 'generateContent' | 'predict', payload?: any): Promise<any> {
+  public static async callVertex(model: string, method: 'generateContent' | 'predict', payload?: any): Promise<any> {
     const { token, projectId } = await this.getAuth();
     const location = 'us-central1'; // Or your desired region
     const url = `https://${location}-aiplatform.googleapis.com/v1beta1/projects/${projectId}/locations/${location}/publishers/google/models/${model}:${method}`;
@@ -63,17 +52,21 @@ export class GeminiService {
     jsonMode: boolean = true
   ): Promise<any> {
     const ai = this.getAI();
-    const mimeType = jsonMode ? "application/json" : "text/plain";
 
-    const PRIMARY_MODEL = 'gemini-2.0-flash-001';
-const FALLBACK_MODEL = 'gemini-2.0-flash-001';
+    // Grounding tools (googleSearch) are incompatible with controlled generation (JSON mode).
+    // When a grounding tool is present, omit responseMimeType and parse JSON from the text response.
+    const hasGroundingTool = tools.some((t: any) => 'googleSearch' in t || 'googleSearchRetrieval' in t);
+    const generationConfig = hasGroundingTool ? {} : { responseMimeType: jsonMode ? "application/json" : "text/plain" };
+
+    const PRIMARY_MODEL = 'gemini-2.5-flash';
+    const FALLBACK_MODEL = 'gemini-2.5-pro';
     try {
       const response = await ai.models.generateContent({
         model: PRIMARY_MODEL,
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         systemInstruction: { parts: [{ text: systemInstruction }] },
         tools: tools,
-        generationConfig: { responseMimeType: mimeType }
+        generationConfig
       });
 
       if (!response.text) throw new Error("Agent completion returned no data.");
@@ -89,7 +82,7 @@ const FALLBACK_MODEL = 'gemini-2.0-flash-001';
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           systemInstruction: { parts: [{ text: systemInstruction }] },
           tools: tools,
-          generationConfig: { responseMimeType: mimeType }
+          generationConfig
         });
 
         if (!fallbackResponse.text) throw new Error("Fallback completion returned no data.");

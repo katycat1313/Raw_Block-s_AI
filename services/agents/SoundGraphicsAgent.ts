@@ -1,6 +1,7 @@
 import { GeminiService } from "../geminiService";
 import { ProductDossier, VideoSequence } from "../../types";
-import { GRAPHICS_DESIGNER_SKILL, AUDIO_AGENT_SKILL } from "./skills";
+import graphicsDesignerSkill from './skills/GraphicsDesigner.md?raw';
+import audioAgentSkill from './skills/AudioAgent.md?raw';
 
 export class SoundGraphicsAgent {
   public static async designAssets(
@@ -36,7 +37,7 @@ export class SoundGraphicsAgent {
         "title": "Creative Title",
         "goal": "${strategy.videoType}",
         "totalDuration": 80,
-        "boxes": [
+        "blocks": [
            {
              "type": "string",
              "imagePrompt": "string (Ultra-high-res Imagen 4 static anchor)",
@@ -53,9 +54,9 @@ export class SoundGraphicsAgent {
     `;
 
     const instructions = `
-            ${GRAPHICS_DESIGNER_SKILL}
+            ${graphicsDesignerSkill}
             
-            ${AUDIO_AGENT_SKILL}
+            ${audioAgentSkill}
             
             You are a dual-specialist agent: an elite Graphics Designer and an Audio Architect. 
             Use the workflows, libraries, and principles defined above to ensure the highest conversion and premium quality.

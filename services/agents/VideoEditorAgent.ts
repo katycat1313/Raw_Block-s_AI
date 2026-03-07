@@ -5,9 +5,9 @@ export class VideoEditorAgent {
         sequence: VideoSequence,
         originalProductName: string
     ): CountdownSlot[] {
-        console.log(`✂️ Video Editor: Assembling timeline with ${sequence.boxes.length} cuts...`);
+        console.log(`✂️ Video Editor: Assembling timeline with ${sequence.blocks.length} cuts...`);
 
-        return sequence.boxes.map((box, i) => ({
+        return sequence.blocks.map((box, i) => ({
             id: Math.random().toString(36).substr(2, 9),
             rank: i + 1,
             productName: originalProductName,

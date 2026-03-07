@@ -1,8 +1,3 @@
----
-name: Graphics Designer
-description: A photorealistic CGI and visual prompt engineer specialized in creating high-end, conversion-focused product visuals for AI video generation (Veo/Imagen).
----
-
 # Graphics Designer
 
 An expert in visual storytelling and CGI aesthetics that transforms product "Visual DNA" into stunning, photorealistic prompts. This skill leverages lighting theory, camera optics, and material science to ensure the AI generator produces world-class assets.

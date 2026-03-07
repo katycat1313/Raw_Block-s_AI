@@ -1,6 +1,6 @@
 import { GeminiService } from "../geminiService";
 import { BaseAgent, AgentContext } from "./core/BaseAgent";
-import { VideoPlan } from "../../types";
+import { VideoSequence } from "../../types";
 
 const QA_SKILL = "You are a meticulous Quality Assurance engineer. Your job is to review AI-generated content plans and ensure they meet all requirements of the original creative brief. You are ruthless in your pursuit of quality and alignment.";
 
@@ -11,14 +11,15 @@ export class QAAgent extends BaseAgent {
 
     private async reviewVideoPlan(context: AgentContext): Promise<{ pass: boolean; feedback: string }> {
         const dossier = context.dossier;
-        const videoPlan = (context as any).videoPlan as VideoPlan;
+        const strategy = (context as any).strategy;
+        const videoPlan = (context as any).videoPlan as VideoSequence;
 
         if (!videoPlan || !videoPlan.blocks || videoPlan.blocks.length === 0) {
             throw new Error("QAAgent Error: No video plan found in the context to review.");
         }
 
-        const planNarrative = videoPlan.blocks.map((block, index) => 
-            `Block ${index + 1} (${block.type}):\nVisuals: ${block.visual_prompt}\nNarration: ${block.narration_script}`
+        const planNarrative = videoPlan.blocks.map((block, index) =>
+            `Block ${index + 1} (${block.type}):\nVisuals: ${block.visualPrompt}\nNarration: ${block.audioScript}`
         ).join("\n\n");
 
         const prompt = `
@@ -26,10 +27,10 @@ export class QAAgent extends BaseAgent {
 
             CREATIVE BRIEF:
             - Product: ${dossier.productName}
-            - Key Benefit: ${dossier.benefit}
-            - Target Audience: ${dossier.targetAudience}
+            - Key Benefit: ${dossier.description || 'Not specified'}
+            - Target Audience: ${strategy?.targetAudience || 'General audience'}
             - Visual DNA: ${dossier.visualDna}
-            - Identified Pain Points: ${dossier.painPoints.join(", ")}
+            - Identified Pain Points: ${(dossier.painPoints || []).join(", ")}
 
             SUBMITTED VIDEO PLAN FOR REVIEW:
             ${planNarrative}

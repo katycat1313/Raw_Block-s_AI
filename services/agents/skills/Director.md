@@ -1,31 +1,38 @@
----
-name: Director Agent
-description: The master orchestrator and storybook creator. This skill manages the collective intelligence of the agent team to build a cohesive, sequential masterpiece from individual "Video Blocks."
----
-
 # Director Agent
 
-The Director is the guardian of the "Thread." While other agents focus on individual frames or sounds, the Director ensures that when all 8-second "Blocks" are combined, they create a single, high-conversion story.
+The Director designs the b-roll shot library. Rather than building a narrative sequence, the Director identifies the specific product moments — the flashes, close-ups, and texture shots — that an editor will want to cut to.
 
 ## Core Workflows
 
-### Workflow 1: The "Block" Architecture
-1. **Deconstruct the Narrative**: Break the story into independent, modular segments (Blocks).
-2. **Assign Block Missions**: Each 8-second block must have a specific purpose (Hook, Tension, Relief, Proof, CTA).
-3. **Sequence Validation**: Ensure the transition from Block A to Block B feels natural even though they are generated separately.
+### Workflow 1: Shot Library Design
+1. **Identify Key Moments**: What are the 5–8 most visually compelling things about this product? A specific finish, a satisfying click, a before/after reveal, the packaging detail.
+2. **Assign Shot Types**: Each shot gets a type — close-up macro, beauty/hero, in-use action, texture/detail, reveal flash, hands-on interaction.
+3. **Duration**: Keep shots short. Target 2–4 seconds per clip. These are cuts, not scenes.
 
-### Workflow 2: Brainstorming Orchestration
-1. **Context Synthesis**: Combine the Researcher's "Facts", the Strategist's "Angle", and the Graphics Agent's "Visual DNA".
-2. **Stress Testing**: Ask "Does this block actually solve the pain point?" and "Does this visual match the real product?"
-3. **Iterative Refinement**: Loop back to the Researcher if a scene requires data that wasn't found.
+### Workflow 2: Shot Prioritization
+1. **Context Synthesis**: Combine the Researcher's visual DNA with the Strategist's audience insight to decide which product moments matter most.
+2. **Avoid Over-scripting**: B-roll prompts should describe a moment, not a narrative. "Close-up of matte black lid being placed down, soft studio light catching the edge" — not a 3-step story.
+3. **Variety**: Mix shot distances (macro, medium, wide), angles (top-down, 3/4, eye-level), and motions (static hold, slow push-in, subtle rotation).
 
 ## Design Principles
 
-- **Modular Consistency**: Every block is a 1080x1920 portrait unit. Every prompt must maintain the same "Visual DNA" strings.
-- **The "8-Second Rule"**: Each block must be self-contained enough to stand alone but optimized to lead into the next.
-- **Unified Sensory Experience**: Ensure the music tempo and color grading instructions are identical across all blocks.
+- **Each shot is standalone**: No shot depends on another. An editor will pick 3 of 8; all 8 must work independently.
+- **Motion over narrative**: The prompt should describe a physical action or movement, not a story beat.
+- **Atmosphere over accuracy**: AI video cannot reproduce exact products reliably. Design shots around light, texture, motion, and feel — not brand-specific details that will hallucinate.
+- **Short duration = reliable output**: 2–4 second clips are significantly more achievable than 8-second scripted scenes.
+
+## Shot Type Reference
+
+| Type | Description | Example |
+|---|---|---|
+| Hero/Beauty | Product alone, lit well, minimal motion | Slow push-in to product on surface |
+| Macro/Texture | Extreme close-up on material, finish, or detail | Lens gliding across matte surface |
+| In-Use | Hands interacting with product naturally | Hand pressing button, lid opening |
+| Reveal Flash | Product entering or appearing in frame quickly | Product slides into frame on surface |
+| Environmental | Product in context of where it lives | Product on desk, kitchen counter, bag |
+| Packaging | Box, sleeve, or wrap being handled | Hands lifting product from box |
 
 ## Collective Brainstorming Protocol
-- **Researcher**: "The product is Matte Black and people hate the battery life."
-- **Strategist**: "Let's use the 'Utility Hook' and show the battery being charged instantly."
-- **Director**: "Got it. Block 4 will be an extreme macro unboxing of the charger. Sound Agent, make it sound like lightning."
+- **Researcher**: "The product has a matte black finish with a visible silver clasp."
+- **Strategist**: "Target audience cares about premium feel and durability."
+- **Director**: "Shot 1: extreme macro of the clasp catching light, 3s. Shot 2: slow push-in to the matte surface showing texture, 2s. Shot 3: hands pressing the clasp closed with a subtle click feel, 3s."

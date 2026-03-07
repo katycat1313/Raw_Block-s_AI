@@ -1,50 +1,69 @@
-# 📦 Countdown Studio: Modular AI Video Production
+# Raw Blocks AI — B-Roll Footage Generator
 
-**Countdown Studio** is a professional-grade AI video editor designed for high-conversion product showcases. Built with a **Modular Box Architecture**, it allows creators to generate, refine, and connect standalone product "boxes" into cinematic countdown videos or viral TikTok shorts.
-
----
-
-## 🚀 The Modular Box Workflow
-
-Unlike traditional one-and-done generators, Countdown Studio treats every product as a permanent asset:
-
-- **The Box (Unit of Production)**: Every product you add is its own "Box." It contains its own AI-optimized script, 4K UGC video reel, and HD narration.
-- **The Vault (Master Library)**: Save your best generations to *The Vault*. These assets persist across projects, allowing you to remix them into new countdowns weeks later.
-- **The Connector**: Quickly connect any number of boxes from your library into a master reel. The AI automatically generates a "connective narrative" to stitch them together seamlessly.
+**Raw Blocks AI** generates short, cinematic b-roll clips for product marketing videos. Instead of trying to build a complete edited video from scratch, it generates the raw material — the 2–5 second product flashes, close-ups, texture shots, and reveal moments that editors cut into larger pieces.
 
 ---
 
-## 🛠 Features
+## What is B-Roll?
 
-### 🎬 Professional NLE Workspace
-- **Horizontal Master Timeline**: A bird's-eye view of your entire sequence with visual clip previews.
-- **Manual Sequence Control**: Drag, drop, and re-order ranks to perfect the countdown flow.
-- **Live Program Monitor**: Real-time feedback for video and audio assets.
+B-roll is the supplemental footage that cuts away from the main shot. In product videos it shows up as:
 
-### 🧠 AI Director's Console
-- **Conversational Refinement**: Talk to the AI to fix lighting, speed, or product accuracy. No more starting from scratch.
-- **Visual DNA Injection**: Automatically extracts and maintains 100% brand/product fidelity across generated clips.
-- **HD Chirp 3 Audio**: Studio-grade narration with multiple voice personalities.
+- A 1-second flash of the product sitting on a surface
+- A close-up of a button being pressed or a lid being opened
+- A macro shot of the product's texture or finish
+- A hand reaching in to grab the product
+- A beauty shot of packaging catching light
 
-### 📱 Social Expansion
-- **One-Click Shorts**: Export any individual product box as a standalone 1080p vertical short for TikTok, Reels, or YT Shorts.
+These clips are the raw inventory of a video editor. You don't watch them alone — you cut to them.
 
 ---
 
-## 🔐 Security & Architecture
+## Why B-Roll (Not Full AI-Generated Videos)?
 
-- **Zero-Footprint Storage**: Your Gemini API key is stored locally in your browser's `localStorage`. It never touches our servers.
-- **Modular Data Model**: The `CountdownSlot` architecture ensures every asset is self-contained and reusable.
+Current AI video generation (Veo, Runway, Sora) is impressive but has a specific weakness: **it cannot reliably reproduce a specific product**. If you give it a reference image of your exact blender — matte black, specific logo placement, particular handle shape — it will approximate. It hallucinates details, changes colors, ignores branding constraints. Generating 6 clips that all look like the *same* product is essentially unsolvable at production quality today.
 
----
+B-roll sidesteps this problem:
 
-## 🛠 Getting Started
-
-1. **Setup**: Clone the repo and run `npm install`.
-2. **Launch**: Run `npm run dev` to open the studio.
-3. **Connect**: Paste your Gemini API Key into the **Studio Offline** config.
-4. **Create**: Start with one "Box," generate its assets, save it to *The Vault*, and repeat!
+- Each clip is **standalone** — no cross-clip product consistency required
+- Focus is on **motion, light, and atmosphere** rather than exact product reproduction
+- 2–5 second duration = simpler prompt = more reliable output
+- Editors pick what works; nothing is wasted
 
 ---
 
-*“Don't just make a video. Build an inventory.”* 📦
+## How It Works
+
+1. **Input**: Paste a product URL and a reference video URL
+2. **Agent Research**: The team analyzes the product — features, visual DNA, pain points, target audience
+3. **B-Roll Shot Planning**: The Director designs a library of short footage moments mapped to the product
+4. **Generation**: Each shot is sent to Runway for video generation (requires Runway API key)
+5. **Library**: Download individual clips and cut them into your edit
+
+---
+
+## Agent Team
+
+| Agent | Role |
+|---|---|
+| Researcher | Extracts product visual DNA, features, and reference footage |
+| Strategist | Maps shots to buyer psychology and platform requirements |
+| Director | Designs the b-roll shot library — what moments to capture |
+| QA | Checks shot plans for brand alignment and visual accuracy |
+| Video Editor | Assembles final shot list and generates Imagen reference frames |
+
+---
+
+## Setup
+
+1. Clone the repo and run `npm install`
+2. Copy `.env.example` to `.env` and fill in your API keys
+3. Run `npm run dev`
+4. Paste a product URL and reference video, then hit **Start Agents**
+
+Required API keys:
+- `VITE_GEMINI_API_KEY` — for the agent research pipeline
+- `VITE_RUNWAY_API_URL` + `VITE_RUNWAY_API_KEY` — for video generation (optional; prompts work without it)
+
+---
+
+*Build a footage library, not a finished video.*

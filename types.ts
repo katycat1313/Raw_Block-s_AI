@@ -232,7 +232,7 @@ export interface BoxConfig {
 
 export interface VideoSequence {
   title: string;
-  boxes: BoxConfig[];
+  blocks: BoxConfig[];
   totalDuration: number;
   goal: string;
   musicTrack?: string;

@@ -1,76 +1,55 @@
-
 import { GeminiService } from "../geminiService";
-import { ProductDossier, SocialStrategy } from "../../types";
+import { SocialStrategy } from "../../types";
 import { BaseAgent, AgentContext } from "./core/BaseAgent";
+import socialStrategistSkill from './skills/SocialStrategist.md?raw';
+import productStrategistSkill from './skills/ProductStrategist.md?raw';
 
 export class SocialMediaAgent extends BaseAgent {
   constructor() {
     super("SocialStrategist", "Viral Marketing & Psychology Expert");
   }
 
-  /**
-   * Skill: Psychological Angle Mapping
-   */
-  private async mapAngle(dossier: ProductDossier) {
-    const prompt = `
-            STRATEGY BRIEF:
-            Product: ${dossier.productName}
-            Pain Points: ${JSON.stringify(dossier.painPoints)}
-            
-            TASK: Pick the #1 psychological trigger (FOMO, Authority, Solution, Aspiration).
-
-            OUTPUT FORMAT (MANDATORY JSON ONLY):
-            {
-                "angle": "string",
-                "targetAudience": "string",
-                "caption": "string",
-                "hashtags": ["string"],
-                "firstComment": "string",
-                "bestTime": "string"
-            }
-        `;
-    return await GeminiService.completion(prompt, "You are a Master of Conversion Psychology. Respond ONLY with raw JSON.", [], true);
+  private getSkills(): string {
+    return socialStrategistSkill + '\n' + productStrategistSkill;
   }
 
   public async execute(context: AgentContext): Promise<AgentContext> {
-    this.log(`Developing viral strategy for ${context.dossier.productName}...`);
-    if (context.onDialogue) context.onDialogue({ agent: this.name, role: this.role, message: `Analyzing product specs and user objections to map the perfect psychological trigger for ${context.dossier.productName}...`, type: 'thought' });
+    this.log(`Building conversion strategy for ${context.dossier.productName}...`);
+    if (context.onDialogue) context.onDialogue({ agent: this.name, role: this.role, message: `Analyzing dossier for ${context.dossier.productName} to select the optimal buying angle and social strategy...`, type: 'thought' });
 
-    // 1. Map the angle
-    const strategyData = await this.mapAngle(context.dossier);
+    const skills = this.getSkills();
+    const prompt = `
+      PRODUCT DOSSIER:
+      - Product: ${context.dossier.productName}
+      - Description: ${context.dossier.description}
+      - Visual DNA: ${context.dossier.visualDna}
+      - Key Features: ${JSON.stringify(context.dossier.features)}
+      - Pain Points: ${JSON.stringify(context.dossier.painPoints)}
 
-    // 🕵️ EXTRA VALIDATION: Stop "undefined" leakage
-    if (!strategyData || typeof strategyData !== 'object' || !strategyData.angle) {
-      console.error("Strategist Fail: Invalid response format.", strategyData);
-      const rawSnippet = JSON.stringify(strategyData).substring(0, 100);
-      throw new Error(`Social Strategist failed. Output: ${rawSnippet}. Please retry.`);
-    }
+      TASK:
+      Using your Social Strategist and Product Strategist skills, build a complete social media strategy.
+      Select the best psychological "Buying Angle" for this product and audience.
+      Draft a viral caption with hashtags optimized for maximum reach.
 
-    if (context.onDialogue) context.onDialogue({ agent: this.name, role: this.role, message: `Strategy Locked: Selected "${strategyData.angle}" targeting ${strategyData.targetAudience}. Drafting conversion copy now.`, type: 'finding' });
+      OUTPUT FORMAT (MANDATORY JSON ONLY):
+      {
+        "angle": "string (e.g. The Instant Solution / The Lifestyle Upgrade / The FOMO Urgency)",
+        "targetAudience": "string (specific micro-audience description)",
+        "videoType": "string (e.g. ASMR Unboxing, POV Review, Before/After)",
+        "psychologicalTriggers": ["string"],
+        "caption": "string (viral ready caption)",
+        "hashtags": ["string"],
+        "firstComment": "string",
+        "bestTime": "string",
+        "sentimentAnalysis": "string"
+      }
+    `;
 
-    // 2. Update Strategy
-    context.strategy = {
-      ...context.strategy,
-      ...strategyData
-    } as SocialStrategy;
+    const strategy: SocialStrategy = await GeminiService.completion(prompt, skills + "\n\nCRITICAL: You MUST respond with ONLY a valid JSON object. No extra text.", [], true);
 
-    // 3. Record to Memory
-    (context as any).sharedMemory?.record(this.name, `Selected Angle: "${strategyData.angle}". Strategy targets: ${strategyData.targetAudience}`, {
-      strategy: strategyData
-    });
+    if (context.onDialogue) context.onDialogue({ agent: this.name, role: this.role, message: `Strategy locked: "${strategy.angle}" angle targeting "${strategy.targetAudience}". Psychological triggers: ${strategy.psychologicalTriggers?.join(', ')}.`, type: 'finding' });
 
+    context.strategy = { ...context.strategy, ...strategy };
     return context;
-  }
-
-  // Legacy static support
-  public static async developStrategy(dossier: ProductDossier): Promise<SocialStrategy> {
-    const instance = new SocialMediaAgent();
-    const context: AgentContext = {
-      dossier,
-      memory: [],
-      mission: "Develop Strategy"
-    };
-    const result = await instance.execute(context as any);
-    return result.strategy!;
   }
 }

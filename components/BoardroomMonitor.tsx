@@ -7,9 +7,10 @@ interface BoardroomMonitorProps {
     onClose: () => void;
     onApprove: () => void;
     status: string;
+    canApprove?: boolean;
 }
 
-const BoardroomMonitor: React.FC<BoardroomMonitorProps> = ({ isOpen, logs, onClose, onApprove, status }) => {
+const BoardroomMonitor: React.FC<BoardroomMonitorProps> = ({ isOpen, logs, onClose, onApprove, status, canApprove = false }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -120,14 +121,14 @@ const BoardroomMonitor: React.FC<BoardroomMonitorProps> = ({ isOpen, logs, onClo
                             Abort Mission
                         </button>
                         <button
-                            disabled={logs.length < 5}
+                            disabled={!canApprove}
                             onClick={onApprove}
-                            className={`flex-1 px-8 py-5 rounded-2xl font-black uppercase text-xs transition-all shadow-xl tracking-widest flex items-center justify-center gap-3 ${logs.length < 5
+                            className={`flex-1 px-8 py-5 rounded-2xl font-black uppercase text-xs transition-all shadow-xl tracking-widest flex items-center justify-center gap-3 ${!canApprove
                                 ? 'bg-slate-800 text-slate-600 cursor-not-allowed'
                                 : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-600/20 hover:scale-[1.02]'
                                 }`}
                         >
-                            {logs.length < 5 ? (
+                            {!canApprove ? (
                                 <>
                                     <span className="w-4 h-4 border-2 border-slate-600 border-t-white rounded-full animate-spin" />
                                     Awaiting Decision...

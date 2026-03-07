@@ -1,8 +1,3 @@
----
-name: Product Strategist
-description: Expert-level product strategy for market success, focusing on competitive positioning, value propositions, and go-to-market execution.
----
-
 # Product Strategist Skill
 
 The Product Strategist provides the high-level business intelligence that ensures the video content isn't just "cool" but is strategically positioned to capture market share.

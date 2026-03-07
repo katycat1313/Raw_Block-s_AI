@@ -1,8 +1,3 @@
----
-name: Social Strategist
-description: A conversion psychologist and trend analyst that maps raw product data to high-velocity social hooks and "Buying Angles."
----
-
 # Social Strategist
 
 A master of viral architecture and purchase intent. This skill takes the Researcher's "Forensic Data" and transforms it into a "Social Media Strategy" that stops the scroll and drives clicks.

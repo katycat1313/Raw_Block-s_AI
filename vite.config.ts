@@ -12,6 +12,58 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       {
+        name: 'runway-proxy',
+        configureServer(server) {
+          server.middlewares.use(async (req: any, res: any, next: any) => {
+            if (!req.url?.startsWith('/api/runway')) return next();
+
+            const runwayPath = req.url.replace('/api/runway', '') || '/';
+            const targetUrl = `https://api.dev.runwayml.com${runwayPath}`;
+            const apiKey = env.VITE_RUNWAY_API_KEY;
+
+            if (!apiKey) {
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: 'VITE_RUNWAY_API_KEY not set in .env' }));
+              return;
+            }
+
+            try {
+              const body: string = await new Promise((resolve, reject) => {
+                let data = '';
+                req.on('data', (chunk: Buffer) => { data += chunk.toString(); });
+                req.on('end', () => resolve(data));
+                req.on('error', reject);
+              });
+
+              const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`,
+                'X-Runway-Version': '2024-11-06',
+              };
+              if (req.headers['idempotency-key']) {
+                headers['Idempotency-Key'] = req.headers['idempotency-key'] as string;
+              }
+
+              const fetchOpts: RequestInit = { method: req.method, headers };
+              if (body && req.method !== 'GET' && req.method !== 'HEAD') {
+                fetchOpts.body = body;
+              }
+
+              const response = await fetch(targetUrl, fetchOpts);
+              const responseText = await response.text();
+
+              res.statusCode = response.status;
+              res.setHeader('Content-Type', response.headers.get('content-type') || 'application/json');
+              res.end(responseText);
+            } catch (err: any) {
+              console.error('[Runway Proxy Error]', err);
+              res.statusCode = 500;
+              res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+        }
+      },
+      {
         name: 'google-oauth-proxy',
         configureServer(server) {
           server.middlewares.use('/api/auth/token', async (req, res, next) => {

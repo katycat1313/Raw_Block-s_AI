@@ -16,7 +16,7 @@ const ConversionDashboard: React.FC<ConversionDashboardProps> = ({ optimized }) 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="glass-panel p-6 rounded-3xl flex flex-col items-center justify-center border border-indigo-500/20 shadow-xl shadow-indigo-500/5 min-h-[320px]">
           <div className="w-full h-48 relative flex items-center justify-center">
-            <div style={{ width: '100%', height: '180px' }}>
+            <div style={{ width: '100%', height: '180px', minWidth: 0 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <RadialBarChart cx="50%" cy="50%" innerRadius="70%" outerRadius="100%" barSize={10} data={data} startAngle={90} endAngle={-270}>
                   <PolarAngleAxis type="number" domain={[0, 100]} angleAxisId={0} tick={false} />

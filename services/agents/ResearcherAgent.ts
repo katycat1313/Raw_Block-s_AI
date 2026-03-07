@@ -1,19 +1,37 @@
-
 import { GeminiService } from "../geminiService";
 import { ProductDossier } from "../../types";
 import { BaseAgent, AgentContext } from "./core/BaseAgent";
 import { SharedMemory } from "./core/SharedMemory";
-import { RESEARCHER_SKILL } from "./skills";
 
 export class ResearcherAgent extends BaseAgent {
     constructor() {
         super("Researcher", "Fact-Based Market Analyst");
     }
 
+    private getSkill(): string {
+        return `# Market Researcher Skill
+
+An expert in digital scavenging and sentiment forensics. This skill transforms a simple URL into a comprehensive dossier of user desire, objections, and competitive gaps.
+
+## Core Workflows
+
+### Workflow 1: Visual DNA Extraction
+1. **Material Identification**: Extract the exact materials (Aluminium, Vegan Leather, Gorilla Glass).
+2. **Color Profile**: Identify the SKU colors and their specific finishes (Matte, High Gloss, Iridescent).
+3. **Form Factor**: Map the physical dimensions and design language (Minimalist, Industrial, Brutalist).
+
+### Workflow 2: Sentiment Forensics
+1. **Reddit/Forum Scraping**: Find "unfiltered" reviews and complaints.
+2. **The "Unspoken Truth"**: Identify what the official marketing *doesn't* say.
+3. **Objection Mapping**: List the top 3 reasons people *don't* buy.
+`;
+    }
+
     /**
      * Skill: Product Discovery
      */
     private async discoverProduct(url: string, videoUrl: string) {
+        const researcherSkill = this.getSkill();
         const prompt = `
             DEEP SCAN: ${url}
             VIDEO: ${videoUrl}
@@ -33,13 +51,14 @@ export class ResearcherAgent extends BaseAgent {
                 "referenceVideoUrls": ["string"]
             }
         `;
-        return await GeminiService.completion(prompt, RESEARCHER_SKILL + "\n\nCRITICAL: You MUST respond with ONLY a valid JSON object. No conversational text, no 'Okay I will scan...', just raw JSON.", [{ googleSearch: {} }], true);
+        return await GeminiService.completion(prompt, researcherSkill + "\n\nCRITICAL: You MUST respond with ONLY a valid JSON object. No conversational text, no 'Okay I will scan...', just raw JSON.", [{ googleSearch: {} }], true);
     }
 
     /**
      * Skill: Sentiment Analysis
      */
     private async analyzeSentiment(productName: string) {
+        const researcherSkill = this.getSkill();
         const prompt = `
             SEARCH: "${productName} reviews reddit"
             Find why people DISLIKE this product. What are the specific pain points?
@@ -51,7 +70,7 @@ export class ResearcherAgent extends BaseAgent {
                 "sentimentScore": number (0-100)
             }
         `;
-        return await GeminiService.completion(prompt, RESEARCHER_SKILL + "\n\nCRITICAL: You MUST respond with ONLY a valid JSON object. No conversational text.", [{ googleSearch: {} }], true);
+        return await GeminiService.completion(prompt, researcherSkill + "\n\nCRITICAL: You MUST respond with ONLY a valid JSON object. No conversational text.", [{ googleSearch: {} }], true);
     }
 
     public async execute(context: AgentContext): Promise<AgentContext> {
@@ -71,6 +90,7 @@ export class ResearcherAgent extends BaseAgent {
         context.dossier = {
             ...context.dossier,
             ...facts,
+            visualDna: typeof facts.visualDna === 'string' ? facts.visualDna : JSON.stringify(facts.visualDna),
             painPoints: sentiment.painPoints || [],
             reviews: sentiment.reviews || []
         };
