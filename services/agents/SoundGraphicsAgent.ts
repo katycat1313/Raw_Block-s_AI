@@ -12,40 +12,45 @@ export class SoundGraphicsAgent {
     console.log(`🎨 Sound & Graphics: Designing assets using advanced skills for ${rawScenes.length} scenes...`);
 
     const prompt = `
-      SCENE CONCEPTS:
+      SHOT CONCEPTS:
       ${JSON.stringify(rawScenes, null, 2)}
 
       PRODUCT CONTEXT:
       Name: ${dossier.productName}
       Visual DNA: ${dossier.visualDna}
-      Pain Points: ${JSON.stringify(dossier.painPoints)}
-      
+
       STRATEGY: ${JSON.stringify(strategy)}
 
       TASK:
-      Utilize your specialized SKILLS to convert these concepts into a production-ready Video Sequence.
-      
-      For EACH scene, follow the "Imagen 4 + Veo 3.1 Hybrid Strategy":
-      1. Generate a "Static Anchor" (imagePrompt) for the absolute photorealistic product look.
-      2. Generate a "Motion Synthesis" (visualPrompt) for the 8-second movement arc.
-      3. Apply "Script Architecting" and "Soundscape Design" for the Audio Script and SFX.
-      4. Assign a type (INTRO, UNBOXING, FEATURE, COMPARISON, PROBLEM_SOLUTION, OUTRO).
-      5. Duration must be exactly 8 seconds per block (unless it's an OUTRO).
+      Convert these b-roll shot concepts into production-ready shot specifications.
+
+      For EACH shot:
+      1. Write a "imagePrompt" (Imagen 4) — a photorealistic still frame showing exactly what the shot looks like at its peak moment.
+      2. Write a "visualPrompt" (Runway) — a short, motion-focused description for a 2–4 second clip. Describe ONLY what moves and how. Keep it under 60 words.
+      3. Assign the correct shot type: HERO, MACRO, IN_USE, REVEAL, ENVIRONMENTAL, or PACKAGING.
+      4. Set duration to 3 seconds (use 4 for IN_USE shots that need more time for the action).
+      5. Specify lighting and camera angle clearly.
+
+      RUNWAY PROMPT GUIDELINES:
+      - Lead with the motion: "Slow push-in to..." / "Macro lens glides across..." / "Hand reaches in and..."
+      - Describe light quality: soft diffused, hard rim, warm golden, cool studio
+      - No narrative. No story. Just what the camera sees moving.
+      - Do NOT reference specific brand names, logos, or text — these will hallucinate.
 
       OUTPUT JSON (VideoSequence format):
       {
-        "title": "Creative Title",
-        "goal": "${strategy.videoType}",
-        "totalDuration": 80,
+        "title": "B-Roll Library: ${dossier.productName}",
+        "goal": "b-roll footage library",
+        "totalDuration": 24,
         "blocks": [
            {
-             "type": "string",
-             "imagePrompt": "string (Ultra-high-res Imagen 4 static anchor)",
-             "visualPrompt": "string (8-second Veo 3.1 motion prompt)",
-             "technicalReasoning": "Why this specific camera/lighting/sound setup works for this scene and strategy.",
-             "audioScript": "string (Viral TTS script)",
-             "sfxDescription": "string (Environmental sounds)",
-             "duration": 8,
+             "type": "HERO | MACRO | IN_USE | REVEAL | ENVIRONMENTAL | PACKAGING",
+             "imagePrompt": "string (Imagen 4 still frame — photorealistic, describes the exact composition)",
+             "visualPrompt": "string (Runway motion prompt — under 60 words, leads with the motion)",
+             "technicalReasoning": "Why this shot type and setup serves the target audience.",
+             "audioScript": "",
+             "sfxDescription": "string (ambient sound that would accompany this shot — optional)",
+             "duration": 3,
              "lighting": "string",
              "camera": "string"
            }

@@ -333,7 +333,7 @@ const AgentWorkflowPage = () => {
                                     {slot.generated.imageUrl && (
                                         <img
                                             src={slot.generated.imageUrl}
-                                            alt={`Block ${slot.rank} reference`}
+                                            alt={`Shot ${slot.rank} reference frame`}
                                             style={{ maxHeight: '120px', borderRadius: '4px', marginBottom: '0.5rem' }}
                                         />
                                     )}
@@ -356,7 +356,7 @@ const AgentWorkflowPage = () => {
                                             />
                                             <a
                                                 href={genState.videoUrl}
-                                                download={`block-${slot.rank}.mp4`}
+                                                download={`shot-${slot.rank}.mp4`}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 style={{
@@ -379,7 +379,7 @@ const AgentWorkflowPage = () => {
                         })}
                     </div>
 
-                    {/* Master Sequence — shown when all blocks are done */}
+                    {/* Shot Library viewer — shown when all shots are generated */}
                     {(() => {
                         const doneSlots = approvedResults.slots.filter(s => videoGenStates[s.id]?.status === 'done');
                         const allDone = doneSlots.length === approvedResults.slots.length && doneSlots.length > 0;

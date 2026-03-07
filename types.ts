@@ -214,7 +214,7 @@ export interface ProductDossier {
 
 export interface BoxConfig {
   id: string;
-  type: 'INTRO' | 'UNBOXING' | 'FEATURE' | 'COMPARISON' | 'PROBLEM_SOLUTION' | 'OUTRO' | 'TESTIMONIAL' | 'AD';
+  type: 'HERO' | 'MACRO' | 'IN_USE' | 'REVEAL' | 'ENVIRONMENTAL' | 'PACKAGING' | 'INTRO' | 'UNBOXING' | 'FEATURE' | 'COMPARISON' | 'PROBLEM_SOLUTION' | 'OUTRO' | 'TESTIMONIAL' | 'AD';
   duration: number;
   visualPrompt: string; // Motion prompt for Veo 3.1
   imagePrompt: string;  // Product reference prompt for Imagen 4
