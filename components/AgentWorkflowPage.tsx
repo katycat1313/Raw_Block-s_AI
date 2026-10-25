@@ -4,6 +4,7 @@ import { DirectorStudio, DeepgramVoice, MusicTrack } from './DirectorStudio';
 import { CHAPTER_PRESETS } from '../constants/chapterPresets';
 import { TimelinePreview, EDL, SeriesPart } from './TimelinePreview';
 import { BoardroomModal, DialogueEvent } from './BoardroomModal';
+import { SequenceProgressModal, SequenceStep } from './SequenceProgressModal';
 import { ApiKeyModal } from './ApiKeyModal';
 import { RecordAppModal } from './RecordAppModal';
 import { StockBrollModal } from './StockBrollModal';
@@ -162,6 +163,186 @@ export const AgentWorkflowPage: React.FC = () => {
     } finally {
       setIsStitching(false);
     }
+  };
+
+  // Full Sequence Pipeline State
+  const [isSequenceModalOpen, setIsSequenceModalOpen] = useState(false);
+  const [sequenceSteps, setSequenceSteps] = useState<SequenceStep[]>([]);
+  const [sequenceStepIndex, setSequenceStepIndex] = useState(0);
+  const [sequenceStatus, setSequenceStatus] = useState('');
+  const sequenceAbortRef = React.useRef(false);
+
+  const totalVaultDuration = seriesParts.reduce((acc, p) => acc + (p.duration || 0), 0);
+
+  const handleGenerateFullSequence = async () => {
+    if (clips.length === 0) {
+      alert('Please upload, record, or import at least one video clip first.');
+      return;
+    }
+
+    // Determine the scenes: check if user provided a multi-part script or use CHAPTER_PRESETS
+    const currentScript = (rawScript || userPrompt || '').trim();
+    
+    // Check if the script has chapter markers like [Part 1], [0:00 - 0:15], etc.
+    const pattern = /(?:\[|\b)(?:part|scene|ch|chapter|\d+:\d+\s*-\s*\d+:\d+)\b[^\]\n]*\]?/gi;
+    const matches = [...currentScript.matchAll(pattern)];
+
+    let partsToRun: Array<{ partNumber: number; title: string; summary: string; script: string }> = [];
+
+    if (matches.length >= 2) {
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index!;
+        const end = (i + 1 < matches.length) ? matches[i + 1].index! : currentScript.length;
+        const chunk = currentScript.substring(start, end).trim();
+        const rawTitle = matches[i][0].replace(/[\[\]]/g, '').trim();
+        partsToRun.push({
+          partNumber: i + 1,
+          title: `Scene ${i + 1}: ${rawTitle}`,
+          summary: chunk.substring(0, 75) + '...',
+          script: chunk.startsWith('[Part') ? chunk : `[Part ${i + 1}] ${chunk}`
+        });
+      }
+    } else {
+      // Use standard structured sequence (all 4 chapters: Hook, Live App Simulations, Metrics, CTA)
+      partsToRun = CHAPTER_PRESETS.map((p) => ({
+        partNumber: p.part,
+        title: p.title,
+        summary: p.summary,
+        script: p.script
+      }));
+    }
+
+    const initialSteps: SequenceStep[] = partsToRun.map((p) => ({
+      partNumber: p.partNumber,
+      title: p.title,
+      summary: p.summary,
+      status: 'pending'
+    }));
+
+    setSequenceSteps(initialSteps);
+    setSequenceStepIndex(0);
+    setIsSequenceModalOpen(true);
+    setSequenceStatus('Starting autonomous sequence pipeline...');
+    sequenceAbortRef.current = false;
+
+    const renderedPartUrls: string[] = [];
+    const geminiKey = localStorage.getItem('GEMINI_API_KEY') || '';
+    const deepgramKey = localStorage.getItem('DEEPGRAM_API_KEY') || '';
+
+    try {
+      for (let i = 0; i < partsToRun.length; i++) {
+        if (sequenceAbortRef.current) break;
+
+        const part = partsToRun[i];
+        setSequenceStepIndex(i);
+
+        // Update step to 'orchestrating'
+        setSequenceSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, status: 'orchestrating' } : s));
+        setSequenceStatus(`Step ${i + 1}/${partsToRun.length}: Directing & assembling ${part.title}...`);
+
+        // 1. Orchestrate
+        const orchRes = await fetch(`${API_BASE}/api/orchestrate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userPrompt: part.script,
+            rawScript: part.script,
+            scriptMode: 'user_direct',
+            selectedVoice,
+            selectedMusicId,
+            enableLightingEffects,
+            enableScreenRecordingSpotlight,
+            enableScreenRecordingSpeed,
+            screenRecordingSpeed: 1.25,
+            geminiKey,
+            deepgramKey
+          })
+        });
+
+        if (!orchRes.ok) {
+          const errData = await orchRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed orchestrating ${part.title}`);
+        }
+
+        const orchData = await orchRes.json();
+        const partEdl = orchData.edl;
+
+        if (sequenceAbortRef.current) break;
+
+        // 2. Render
+        setSequenceSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, status: 'rendering' } : s));
+        setSequenceStatus(`Step ${i + 1}/${partsToRun.length}: Rendering ${part.title} with FFmpeg...`);
+
+        const renderRes = await fetch(`${API_BASE}/api/render`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ edl: partEdl })
+        });
+
+        if (!renderRes.ok) {
+          const errData = await renderRes.json().catch(() => ({}));
+          throw new Error(errData.error || `Failed rendering ${part.title}`);
+        }
+
+        const renderData = await renderRes.json();
+        const videoUrl = normalizeUrl(renderData.videoUrl)!;
+        const duration = renderData.duration || partEdl.totalDuration;
+
+        renderedPartUrls.push(videoUrl);
+
+        // 3. Save into Series Vault
+        const newPartItem: SeriesPart = {
+          id: `part_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          label: partEdl.partInfo?.label || `Part ${i + 1}`,
+          videoUrl,
+          duration,
+          partNumber: i + 1,
+          videoNumber: 1,
+          createdAt: Date.now()
+        };
+
+        setSeriesParts((prev) => [...prev, newPartItem]);
+
+        // Update step to 'completed'
+        setSequenceSteps((prev) => prev.map((s, idx) => idx === i ? {
+          ...s,
+          status: 'completed',
+          videoUrl,
+          duration
+        } : s));
+
+        // 4. Safe Pacing Cooldown (2.5s) between scenes if there's a next part
+        if (i < partsToRun.length - 1 && !sequenceAbortRef.current) {
+          setSequenceSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, status: 'cooling' } : s));
+          setSequenceStatus(`Pacing pause (2.5s)... Allowing audio buffer & file system to settle`);
+          await new Promise((r) => setTimeout(r, 2500));
+          setSequenceSteps((prev) => prev.map((s, idx) => idx === i ? { ...s, status: 'completed' } : s));
+        }
+      }
+
+      // 5. Automatic Stitching into Master Video
+      if (!sequenceAbortRef.current && renderedPartUrls.length >= 2) {
+        setSequenceStatus(`🧵 Seamlessly stitching all ${renderedPartUrls.length} scenes into master feature film...`);
+        await handleStitchParts(renderedPartUrls, selectedMusicId || 'preserve');
+        setSequenceStatus(`🎉 Full sequence generation and stitching complete!`);
+      }
+    } catch (err: any) {
+      console.error('Sequence generation error:', err);
+      setSequenceStatus(`Error: ${err.message}`);
+      setSequenceSteps((prev) => prev.map((s, idx) => idx === sequenceStepIndex ? { ...s, status: 'failed', error: err.message } : s));
+    }
+  };
+
+  const handleCancelSequence = () => {
+    sequenceAbortRef.current = true;
+    setSequenceStatus('Sequence cancelled by user.');
+  };
+
+  const handleWatchMasterVideo = () => {
+    setIsSequenceModalOpen(false);
+    setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    }, 250);
   };
 
   // Settings Modal & API Status
@@ -571,6 +752,7 @@ export const AgentWorkflowPage: React.FC = () => {
             enableScreenRecordingSpeed={enableScreenRecordingSpeed}
             setEnableScreenRecordingSpeed={setEnableScreenRecordingSpeed}
             onStartOrchestration={handleStartOrchestration}
+            onGenerateFullSequence={handleGenerateFullSequence}
             isOrchestrating={isOrchestrating}
             clipCount={clips.length}
             seriesPartsCount={seriesParts.length}
@@ -593,8 +775,23 @@ export const AgentWorkflowPage: React.FC = () => {
           selectedMusicId={selectedMusicId}
           musicTracks={musicTracks}
           onGoToNextPart={handleGoToNextPart}
+          onGenerateFullSequence={handleGenerateFullSequence}
         />
       </main>
+
+      {/* Autonomous Full Sequence Progress Modal */}
+      <SequenceProgressModal
+        isOpen={isSequenceModalOpen}
+        onClose={() => setIsSequenceModalOpen(false)}
+        steps={sequenceSteps}
+        currentStepIndex={sequenceStepIndex}
+        statusMessage={sequenceStatus}
+        isStitching={isStitching}
+        stitchedVideoUrl={stitchedVideoUrl}
+        totalVaultDuration={totalVaultDuration}
+        onCancel={handleCancelSequence}
+        onWatchMasterVideo={handleWatchMasterVideo}
+      />
 
       {/* Real-Time Agent Dialogue Modal */}
       <BoardroomModal

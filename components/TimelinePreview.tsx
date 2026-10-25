@@ -71,6 +71,7 @@ interface TimelinePreviewProps {
   selectedMusicId?: string;
   musicTracks?: Array<{ id: string; name: string }>;
   onGoToNextPart?: (targetPartNumber?: number) => void;
+  onGenerateFullSequence?: () => void;
 }
 
 export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
@@ -87,7 +88,8 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
   stitchedVideoUrl = null,
   selectedMusicId = '',
   musicTracks = [],
-  onGoToNextPart
+  onGoToNextPart,
+  onGenerateFullSequence
 }) => {
   const [stitchMusicChoice, setStitchMusicChoice] = useState<string>('preserve');
 
@@ -471,7 +473,30 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {onGenerateFullSequence && (
+              <button
+                type="button"
+                onClick={onGenerateFullSequence}
+                style={{
+                  padding: '0.45rem 1rem',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.35)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>⚡</span> Generate Full Sequence
+              </button>
+            )}
             <span style={{
               fontSize: '0.8rem',
               padding: '0.35rem 0.8rem',

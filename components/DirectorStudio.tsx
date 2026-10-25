@@ -34,6 +34,7 @@ interface DirectorStudioProps {
   enableScreenRecordingSpeed: boolean;
   setEnableScreenRecordingSpeed: (val: boolean) => void;
   onStartOrchestration: () => void;
+  onGenerateFullSequence?: () => void;
   isOrchestrating: boolean;
   clipCount: number;
   seriesPartsCount?: number;
@@ -59,6 +60,7 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
   enableScreenRecordingSpeed,
   setEnableScreenRecordingSpeed,
   onStartOrchestration,
+  onGenerateFullSequence,
   isOrchestrating,
   clipCount,
   seriesPartsCount = 0
@@ -546,25 +548,54 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
         </label>
       </div>
 
-      {/* Start Production Button */}
-      <div style={{ marginTop: 'auto', paddingTop: '0.75rem' }}>
+      {/* Production Buttons: Full Sequence vs Single Scene */}
+      <div style={{ marginTop: 'auto', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+        {/* Primary Hero Button: Generate Full Sequence */}
+        {onGenerateFullSequence && (
+          <button
+            type="button"
+            onClick={onGenerateFullSequence}
+            disabled={isOrchestrating || clipCount === 0}
+            style={{
+              width: '100%',
+              padding: '0.95rem 1.25rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: clipCount === 0
+                ? '#334155'
+                : 'linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)',
+              color: '#ffffff',
+              fontSize: '1rem',
+              fontWeight: 800,
+              cursor: clipCount === 0 || isOrchestrating ? 'not-allowed' : 'pointer',
+              boxShadow: clipCount === 0 ? 'none' : '0 6px 25px rgba(16, 185, 129, 0.45)',
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.6rem'
+            }}
+          >
+            <span>⚡</span>
+            Generate Full Sequence (All Scenes ➔ Master Film)
+          </button>
+        )}
+
+        {/* Secondary Button: Direct Single Scene Only */}
         <button
           type="button"
           onClick={onStartOrchestration}
           disabled={isOrchestrating || clipCount === 0}
           style={{
             width: '100%',
-            padding: '0.9rem',
-            borderRadius: '12px',
-            border: 'none',
-            background: clipCount === 0
-              ? '#334155'
-              : 'linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #ec4899 100%)',
-            color: '#ffffff',
-            fontSize: '0.95rem',
+            padding: '0.7rem',
+            borderRadius: '10px',
+            border: '1px solid #3b3955',
+            background: clipCount === 0 ? '#1e293b' : 'rgba(99, 102, 241, 0.15)',
+            color: clipCount === 0 ? '#64748b' : '#c7d2fe',
+            fontSize: '0.84rem',
             fontWeight: 700,
             cursor: clipCount === 0 || isOrchestrating ? 'not-allowed' : 'pointer',
-            boxShadow: clipCount === 0 ? 'none' : '0 4px 20px rgba(99, 102, 241, 0.4)',
             transition: 'all 0.2s ease',
             display: 'flex',
             alignItems: 'center',
@@ -580,7 +611,7 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
           ) : (
             <>
               <span>🎬</span>
-              {clipCount === 0 ? 'Upload Video Clips to Begin' : 'Assemble & Direct Video'}
+              Direct Current Scene Only
             </>
           )}
         </button>
