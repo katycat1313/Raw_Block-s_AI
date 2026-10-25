@@ -468,7 +468,7 @@ app.post('/api/orchestrate', async (req, res) => {
       userPrompt,
       scriptMode,
       rawScript,
-      clips: clipDatabase,
+      clips: assignBlockTaxonomy(clipDatabase),
       selectedVoice: selectedVoice || 'aura-orion-en',
       musicTrack: musicTrackPath,
       enableLightingEffects: enableLightingEffects ?? true,

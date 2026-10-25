@@ -93,33 +93,59 @@ export async function generateVoiceover({
   console.log(`[Deepgram] Generating voiceover (${voice}): "${cleanText.substring(0, 40)}..."`);
   const endpoint = `https://api.deepgram.com/v1/speak?model=${encodeURIComponent(voice)}`;
 
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Token ${effectiveApiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ text: cleanText })
-  });
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error(`[Deepgram API Error ${response.status}]`, errorText);
-    throw new Error(`Deepgram API error (${response.status}): ${errorText}`);
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Token ${effectiveApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ text: cleanText }),
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.warn(`[Deepgram API Warning ${response.status}] ${errorText}. Using fallback audio generator.`);
+      const { duration } = await generateFallbackAudio(cleanText, outputPath);
+      return {
+        id: fileId,
+        audioPath: outputPath,
+        duration,
+        voice,
+        text: cleanText,
+        isSimulated: true
+      };
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    fs.writeFileSync(outputPath, Buffer.from(arrayBuffer));
+
+    // Probe exact audio duration
+    const meta = await getVideoMetadata(outputPath);
+
+    return {
+      id: fileId,
+      audioPath: outputPath,
+      duration: meta.duration || 3.0,
+      voice,
+      text: cleanText,
+      isSimulated: false
+    };
+  } catch (netErr) {
+    console.warn(`[Deepgram Network Warning] ${netErr.message}. Gracefully using fallback audio generator so production never stops.`);
+    const { duration } = await generateFallbackAudio(cleanText, outputPath);
+    return {
+      id: fileId,
+      audioPath: outputPath,
+      duration,
+      voice,
+      text: cleanText,
+      isSimulated: true
+    };
   }
-
-  const arrayBuffer = await response.arrayBuffer();
-  fs.writeFileSync(outputPath, Buffer.from(arrayBuffer));
-
-  // Probe exact audio duration
-  const meta = await getVideoMetadata(outputPath);
-
-  return {
-    id: fileId,
-    audioPath: outputPath,
-    duration: meta.duration || 3.0,
-    voice,
-    text: cleanText,
-    isSimulated: false
-  };
 }

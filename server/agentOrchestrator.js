@@ -56,8 +56,17 @@ export class VideoAgentOrchestrator {
     const totalAvailableFootage = clips.reduce((acc, c) => acc + (c.duration || 0), 0);
     const screenRecordingCount = clips.filter(c => c.contentType === 'screen_recording').length;
     
+    // Category Breakdown from Block Key
+    const catCounts = { A: 0, B: 0, C: 0, D: 0, E: 0 };
+    clips.forEach(c => {
+      const letter = c.categoryLetter || (c.blockCode ? c.blockCode[0] : 'B');
+      if (catCounts[letter] !== undefined) catCounts[letter]++;
+    });
+
     this.log('Scout', 'Asset Scout', 
-      `Library contains ${clips.length} reusable raw blocks (${totalAvailableFootage.toFixed(1)}s total). ${screenRecordingCount} screen recordings. Ready for targeted selection.`, 
+      `🔑 Consulted BLOCK_KEY.txt: Found ${clips.length} reusable blocks across Categories: ` +
+      `[A] Hooks: ${catCounts.A}, [B] Demos: ${catCounts.B}, [C] Metrics: ${catCounts.C}, [D] Proof: ${catCounts.D}, [E] CTA: ${catCounts.E} ` +
+      `(${totalAvailableFootage.toFixed(1)}s total). Inventory confirmed—reusing existing blocks first to conserve resources.`, 
       'finding'
     );
 
@@ -167,8 +176,9 @@ export class VideoAgentOrchestrator {
       const startIn = Math.min(0.5, Math.max(0, (clipDuration - beatDuration) / 2));
       const endOut = Math.min(clipDuration, startIn + beatDuration);
 
+      const blockTag = chosenClip.blockCode ? `[${chosenClip.blockCode}] ` : '';
       this.log('Director', 'Executive Director', 
-        `Beat #${i + 1} ("${beat.text.substring(0, 30)}...") matched to Clip "${chosenClip.title}". (${match.rationale})`,
+        `Beat #${i + 1} ("${beat.text.substring(0, 30)}...") matched to Block ${blockTag}"${chosenClip.title}". (${match.rationale})`,
         'thought'
       );
 
