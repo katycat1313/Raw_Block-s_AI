@@ -318,6 +318,64 @@ export async function renderTimeline({
 }
 
 /**
+ * Overlay new voiceover audio (and optional ducked background music) directly onto
+ * an existing rendered video without re-encoding the video stream (-c:v copy).
+ * Completes in ~1 second to quickly salvage and remix videos!
+ */
+export async function addVoiceoverToVideo({
+  videoPath,
+  voiceoverAudioPath,
+  musicAudioPath = null,
+  musicVolume = 0.15,
+  outputPath
+}) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!fs.existsSync(videoPath)) {
+        return reject(new Error(`Source video not found: ${videoPath}`));
+      }
+      if (!fs.existsSync(voiceoverAudioPath)) {
+        return reject(new Error(`Voiceover audio not found: ${voiceoverAudioPath}`));
+      }
+
+      const inputs = ['-nostdin', '-i', videoPath, '-i', voiceoverAudioPath];
+      let complexFilter = '';
+      let audioMap = '-map 0:v -map 1:a';
+
+      if (musicAudioPath && fs.existsSync(musicAudioPath)) {
+        inputs.push('-stream_loop', '-1', '-i', musicAudioPath);
+        complexFilter = `
+          [1:a]volume=1.4[vo_boost];
+          [2:a]volume=${musicVolume}[bgm_raw];
+          [bgm_raw][vo_boost]sidechaincompress=threshold=0.12:ratio=3:attack=30:release=600[ducked_bgm];
+          [vo_boost][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]
+        `.replace(/\s+/g, '');
+        audioMap = '-map 0:v -map [aout]';
+      }
+
+      const args = [
+        ...inputs,
+        ...(complexFilter ? ['-filter_complex', complexFilter] : []),
+        ...audioMap.split(' ').filter(Boolean),
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        '-y',
+        outputPath
+      ];
+
+      execFile(FFMPEG_PATH, args, (err, stdout, stderr) => {
+        if (err) return reject(new Error(`Failed to add voiceover: ${stderr || err.message}`));
+        resolve(outputPath);
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}
+
+/**
  * Stitches multiple rendered video parts (e.g. Part 1, Part 2, Part 3)
  * into a single unified master film.
  * Supports continuous background music and seamless audio crossfades so parts mesh perfectly!

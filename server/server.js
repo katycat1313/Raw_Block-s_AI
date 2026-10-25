@@ -6,9 +6,9 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbientMusic, stitchVideoParts } from './ffmpegService.js';
+import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbientMusic, stitchVideoParts, addVoiceoverToVideo } from './ffmpegService.js';
 import { analyzeVideoClip } from './clipVisionService.js';
-import { DEEPGRAM_VOICES } from './deepgramService.js';
+import { DEEPGRAM_VOICES, generateVoiceover } from './deepgramService.js';
 import { VideoAgentOrchestrator } from './agentOrchestrator.js';
 import { recordAppWorkflow, recordAppMultiClips } from './browserRecorder.js';
 import { searchBrollClips, importBrollClip } from './pexelsService.js';
@@ -722,6 +722,70 @@ app.post('/api/render', async (req, res) => {
     });
   } catch (err) {
     console.error('[Render Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add or replace voiceover audio on an existing rendered video without re-rendering clips
+app.post('/api/add-voiceover', async (req, res) => {
+  try {
+    const { videoUrl, voiceoverText, selectedVoice, selectedMusicId } = req.body;
+    if (!videoUrl) return res.status(400).json({ error: 'Source video URL is required.' });
+    if (!voiceoverText || voiceoverText.trim().length === 0) {
+      return res.status(400).json({ error: 'Voiceover text is required.' });
+    }
+
+    // Resolve source video path
+    const filename = path.basename(videoUrl);
+    let videoPath = path.join(rendersDir, filename);
+    if (!fs.existsSync(videoPath)) {
+      videoPath = path.join(uploadsDir, filename);
+    }
+    if (!fs.existsSync(videoPath)) {
+      return res.status(404).json({ error: `Video file not found: ${filename}` });
+    }
+
+    console.log(`[Add Voiceover] Generating audio for: "${voiceoverText.substring(0, 40)}..."`);
+
+    // 1. Generate Voiceover Audio (Deepgram Aura or Windows SAPI Speech)
+    const voiceRes = await generateVoiceover({
+      text: voiceoverText,
+      voice: selectedVoice || 'aura-orion-en',
+      apiKey: process.env.DEEPGRAM_API_KEY,
+      outputDir: audioDir
+    });
+
+    // 2. Resolve background music
+    let musicTrackPath = null;
+    if (selectedMusicId && selectedMusicId !== 'none') {
+      const candidatePath = path.join(musicDir, selectedMusicId);
+      if (fs.existsSync(candidatePath)) musicTrackPath = candidatePath;
+    } else if (selectedMusicId !== 'none' && fs.existsSync(defaultSampleMusicPath)) {
+      musicTrackPath = defaultSampleMusicPath;
+    }
+
+    // 3. Overlay Voiceover & Music onto Video
+    const newFilename = `voiced_${Date.now()}_${filename}`;
+    const outputPath = path.join(rendersDir, newFilename);
+
+    await addVoiceoverToVideo({
+      videoPath,
+      voiceoverAudioPath: voiceRes.audioPath,
+      musicAudioPath: musicTrackPath,
+      musicVolume: 0.15,
+      outputPath
+    });
+
+    const meta = await getVideoMetadata(outputPath);
+
+    res.json({
+      success: true,
+      videoUrl: `/storage/renders/${newFilename}`,
+      duration: meta.duration,
+      voiceoverDuration: voiceRes.duration
+    });
+  } catch (err) {
+    console.error('[Add Voiceover Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

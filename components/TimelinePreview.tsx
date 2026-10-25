@@ -1,5 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { getBlockRole } from './ClipLibrary';
+
+const API_BASE = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? `http://${window.location.hostname}:3001`
+  : '';
+
+const normalizeUrl = (url?: string | null) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url}`;
+};
 
 export interface TimelineClip {
   beatIndex: number;
@@ -92,6 +102,54 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
   onGenerateFullSequence
 }) => {
   const [stitchMusicChoice, setStitchMusicChoice] = useState<string>('preserve');
+  const [activeVideoUrl, setActiveVideoUrl] = useState<string | null>(renderedVideoUrl);
+  const [isVoiceoverModalOpen, setIsVoiceoverModalOpen] = useState(false);
+  const [voiceoverText, setVoiceoverText] = useState('');
+  const [isAddingVoiceover, setIsAddingVoiceover] = useState(false);
+  const [voiceoverSuccess, setVoiceoverSuccess] = useState('');
+
+  useEffect(() => {
+    setActiveVideoUrl(renderedVideoUrl);
+    if (edl && edl.clips && edl.clips.length > 0) {
+      setVoiceoverText(edl.clips.map((c) => c.beatText).join(' '));
+    }
+  }, [renderedVideoUrl, edl]);
+
+  const handleAddVoiceover = async () => {
+    if (!activeVideoUrl) return;
+    if (!voiceoverText.trim()) {
+      alert('Please enter voiceover narration text to speak.');
+      return;
+    }
+
+    setIsAddingVoiceover(true);
+    setVoiceoverSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/add-voiceover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: activeVideoUrl,
+          voiceoverText: voiceoverText.trim(),
+          selectedVoice: edl?.selectedVoice || 'aura-orion-en',
+          selectedMusicId: edl?.musicTrack || selectedMusicId
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add voiceover');
+
+      setActiveVideoUrl(normalizeUrl(data.videoUrl));
+      setVoiceoverSuccess('✓ Voiceover attached and video salvaged successfully!');
+      setTimeout(() => {
+        setIsVoiceoverModalOpen(false);
+      }, 1500);
+    } catch (err: any) {
+      alert(`Error adding voiceover: ${err.message}`);
+    } finally {
+      setIsAddingVoiceover(false);
+    }
+  };
 
   // If no EDL and no series parts in vault, don't show timeline
   if (!edl && seriesParts.length === 0) return null;
@@ -183,7 +241,7 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
           </div>
 
           {/* Rendered Video Player (If finished) */}
-          {renderedVideoUrl && (
+          {(activeVideoUrl || renderedVideoUrl) && (
             <div style={{
               background: '#090a0f',
               border: '2px solid #818cf8',
@@ -195,7 +253,8 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                 🎉 Rendered Video Ready {edl.partInfo ? `(${edl.partInfo.label})` : ''}!
               </h4>
               <video
-                src={renderedVideoUrl}
+                key={activeVideoUrl || renderedVideoUrl}
+                src={activeVideoUrl || renderedVideoUrl || undefined}
                 controls
                 autoPlay
                 style={{
@@ -209,7 +268,7 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
               />
               <div style={{ display: 'flex', gap: '0.85rem', justifyContent: 'center', flexWrap: 'wrap' }}>
                 <a
-                  href={renderedVideoUrl}
+                  href={activeVideoUrl || renderedVideoUrl || undefined}
                   download={`${edl.partInfo ? edl.partInfo.label.replace(/\s+/g, '_').toLowerCase() : 'episode_clip'}.mp4`}
                   target="_blank"
                   rel="noreferrer"
@@ -229,6 +288,28 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                 >
                   ⬇️ Download This Video (MP4)
                 </a>
+
+                {/* 🎙️ Add / Replace Voiceover Button to Salvage Video */}
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceoverModalOpen(!isVoiceoverModalOpen)}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    padding: '0.65rem 1.4rem',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)'
+                  }}
+                >
+                  <span>🎙️</span> {isVoiceoverModalOpen ? 'Hide Voiceover Tool' : 'Add / Replace Voiceover'}
+                </button>
 
                 {onAddSeriesPart && (
                   <button
@@ -283,7 +364,7 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                       if (!isAlreadyInVault && onAddSeriesPart) {
                         onAddSeriesPart({
                           label: edl.partInfo?.label || `Part ${seriesParts.length + 1}`,
-                          videoUrl: renderedVideoUrl,
+                          videoUrl: activeVideoUrl || renderedVideoUrl,
                           duration: edl.totalDuration,
                           partNumber: edl.partInfo?.partNumber || seriesParts.length + 1,
                           videoNumber: edl.partInfo?.videoNumber || 1,
@@ -315,6 +396,103 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                   </button>
                 )}
               </div>
+
+              {/* Voiceover Salvage Drawer */}
+              {isVoiceoverModalOpen && (
+                <div style={{
+                  width: '100%',
+                  marginTop: '1.25rem',
+                  background: '#12121c',
+                  border: '1px solid #4f46e5',
+                  borderRadius: '10px',
+                  padding: '1.25rem',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.75rem',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.5)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#f1f5f9', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <span>🎙️</span> Salvage Video: Add / Replace Spoken Voiceover
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                        Muxes real spoken voice narration directly onto this video in ~1s without re-encoding!
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsVoiceoverModalOpen(false)}
+                      style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '0.9rem' }}
+                    >
+                      ✕
+                    </button>
+                  </div>
+
+                  <textarea
+                    rows={4}
+                    placeholder="Type or paste the narration you want spoken out loud over this video..."
+                    value={voiceoverText}
+                    onChange={(e) => setVoiceoverText(e.target.value)}
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #6366f1',
+                      background: '#181824',
+                      color: '#f8fafc',
+                      fontSize: '0.86rem',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      lineHeight: '1.4'
+                    }}
+                  />
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.74rem', color: '#a5b4fc' }}>
+                      ⚡ Synthesizes speech (Windows SAPI / Deepgram) and mixes with ducked ambient music.
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={handleAddVoiceover}
+                      disabled={isAddingVoiceover || !voiceoverText.trim()}
+                      style={{
+                        padding: '0.6rem 1.4rem',
+                        borderRadius: '8px',
+                        background: 'linear-gradient(135deg, #a855f7, #6366f1)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        cursor: isAddingVoiceover || !voiceoverText.trim() ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem'
+                      }}
+                    >
+                      {isAddingVoiceover ? (
+                        <>
+                          <span style={{ animation: 'spin 1.5s linear infinite' }}>⏳</span>
+                          Generating & Attaching Voiceover...
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡</span> Salvage & Attach Voiceover (1-Sec)
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {voiceoverSuccess && (
+                    <div style={{ fontSize: '0.82rem', color: '#34d399', fontWeight: 700, marginTop: '0.25rem' }}>
+                      {voiceoverSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
