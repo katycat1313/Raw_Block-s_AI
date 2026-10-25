@@ -26,7 +26,7 @@ const CURSOR_INJECTION_SCRIPT = `
     border-radius: 50%;
     pointer-events: none;
     z-index: 2147483647;
-    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+    transition: transform 0.20s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.2s;
     box-shadow: 0 2px 10px rgba(0,0,0,0.5);
     transform: translate(-50%, -50%);
   \`;
@@ -74,6 +74,7 @@ export async function recordAppWorkflow({
   url,
   actions = [], // Array of { type: 'click'|'type'|'scroll'|'wait', selector?, text?, y?, delayMs? }
   targetDurationSeconds = 8,
+  speedMultiplier = 1.25, // Snappy human speed-up factor (1.25x - 1.5x)
   outputDir,
   onProgress
 }) {
@@ -126,7 +127,7 @@ export async function recordAppWorkflow({
               const cy = box.y + box.height / 2;
               // Smooth mouse move with virtual cursor
               await page.evaluate(({ x, y }) => window.__moveCursor && window.__moveCursor(x, y), { x: cx, y: cy });
-              await page.waitForTimeout(350); // Natural human hesitation
+              await page.waitForTimeout(250); // Natural human micro-hesitation
               await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: cx, y: cy });
               await el.click();
             }
@@ -137,32 +138,35 @@ export async function recordAppWorkflow({
           try {
             const el = await page.waitForSelector(action.selector, { timeout: 5000 });
             await el.click();
-            await page.waitForTimeout(200);
-            await el.type(action.text, { delay: 65 }); // Natural typing cadence
+            await page.waitForTimeout(150);
+            await el.type(action.text, { delay: 45 }); // Snappy human typing cadence
           } catch (e) {
             console.warn(`[BrowserRecorder] Could not type into ${action.selector}: ${e.message}`);
           }
         } else if (action.type === 'scroll') {
           const scrollY = action.y || 400;
           await page.evaluate((y) => window.scrollBy({ top: y, behavior: 'smooth' }), scrollY);
-          await page.waitForTimeout(1200);
+          await page.waitForTimeout(700);
         } else if (action.type === 'wait') {
-          await page.waitForTimeout(action.delayMs || 2000);
+          await page.waitForTimeout(action.delayMs || 1000);
         }
 
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(300);
       }
     } else {
-      // Default natural showcase: slow smooth scroll and mouse exploration
-      notify('Exploring page with natural showcase motion...');
-      await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 400));
-      await page.waitForTimeout(1500);
-      await page.evaluate(() => window.scrollBy({ top: 350, behavior: 'smooth' }));
-      await page.waitForTimeout(1800);
-      await page.evaluate(() => window.__moveCursor && window.__moveCursor(1100, 520));
-      await page.waitForTimeout(1200);
-      await page.evaluate(() => window.scrollBy({ top: -200, behavior: 'smooth' }));
-      await page.waitForTimeout(1500);
+      // Snappy human showcase: active mouse exploration, feature card hovering, swift smooth scrolling
+      notify('Exploring page with snappy human showcase motion...');
+      await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
+      await page.waitForTimeout(600);
+      await page.evaluate(() => window.__moveCursor && window.__moveCursor(680, 480));
+      await page.waitForTimeout(500);
+      await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 680, y: 480 });
+      await page.evaluate(() => window.scrollBy({ top: 380, behavior: 'smooth' }));
+      await page.waitForTimeout(800);
+      await page.evaluate(() => window.__moveCursor && window.__moveCursor(1120, 540));
+      await page.waitForTimeout(700);
+      await page.evaluate(() => window.scrollBy({ top: -160, behavior: 'smooth' }));
+      await page.waitForTimeout(600);
     }
 
     notify('Closing browser and flushing video stream...');
@@ -181,8 +185,18 @@ export async function recordAppWorkflow({
     const finalMp4Filename = `agent_rec_${Date.now()}.mp4`;
     const finalMp4Path = path.join(outputDir, finalMp4Filename);
 
-    notify('Normalizing video into pristine H.264 1080p MP4...');
-    // Transcode raw recording to clean 1080p MP4
+    notify(`Normalizing video into pristine H.264 1080p MP4 (${speedMultiplier > 1 ? `${speedMultiplier}x speed-up` : '1.0x'})...`);
+    
+    // Transcode raw recording to clean 1080p MP4 with optional speedup
+    const vfFilters = [];
+    if (speedMultiplier && speedMultiplier !== 1.0) {
+      vfFilters.push(`setpts=PTS/${speedMultiplier}`);
+    }
+    vfFilters.push('scale=1920:1080:force_original_aspect_ratio=decrease');
+    vfFilters.push('pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black');
+    vfFilters.push('setsar=1');
+    vfFilters.push('fps=30');
+
     await new Promise((resolve, reject) => {
       const args = [
         '-nostdin',
@@ -191,7 +205,7 @@ export async function recordAppWorkflow({
         '-preset', 'fast',
         '-crf', '18',
         '-pix_fmt', 'yuv420p',
-        '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30',
+        '-vf', vfFilters.join(','),
         '-y',
         finalMp4Path
       ];

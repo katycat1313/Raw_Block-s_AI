@@ -43,6 +43,7 @@ export const AgentWorkflowPage: React.FC = () => {
   // FX & Lighting Controls
   const [enableLightingEffects, setEnableLightingEffects] = useState(true);
   const [enableScreenRecordingSpotlight, setEnableScreenRecordingSpotlight] = useState(true);
+  const [enableScreenRecordingSpeed, setEnableScreenRecordingSpeed] = useState(true);
 
   // Orchestration & Dialogue State
   const [isOrchestrating, setIsOrchestrating] = useState(false);
@@ -211,6 +212,8 @@ export const AgentWorkflowPage: React.FC = () => {
           selectedMusicId,
           enableLightingEffects,
           enableScreenRecordingSpotlight,
+          enableScreenRecordingSpeed,
+          screenRecordingSpeed: 1.25,
           geminiKey,
           deepgramKey
         })
@@ -455,6 +458,8 @@ export const AgentWorkflowPage: React.FC = () => {
             setEnableLightingEffects={setEnableLightingEffects}
             enableScreenRecordingSpotlight={enableScreenRecordingSpotlight}
             setEnableScreenRecordingSpotlight={setEnableScreenRecordingSpotlight}
+            enableScreenRecordingSpeed={enableScreenRecordingSpeed}
+            setEnableScreenRecordingSpeed={setEnableScreenRecordingSpeed}
             onStartOrchestration={handleStartOrchestration}
             isOrchestrating={isOrchestrating}
             clipCount={clips.length}

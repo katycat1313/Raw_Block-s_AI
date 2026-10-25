@@ -30,6 +30,8 @@ interface DirectorStudioProps {
   setEnableLightingEffects: (val: boolean) => void;
   enableScreenRecordingSpotlight: boolean;
   setEnableScreenRecordingSpotlight: (val: boolean) => void;
+  enableScreenRecordingSpeed: boolean;
+  setEnableScreenRecordingSpeed: (val: boolean) => void;
   onStartOrchestration: () => void;
   isOrchestrating: boolean;
   clipCount: number;
@@ -52,6 +54,8 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
   setEnableLightingEffects,
   enableScreenRecordingSpotlight,
   setEnableScreenRecordingSpotlight,
+  enableScreenRecordingSpeed,
+  setEnableScreenRecordingSpeed,
   onStartOrchestration,
   isOrchestrating,
   clipCount
@@ -351,6 +355,19 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
           />
           <span>
             <strong>Auto-Balance Lighting & Exposure:</strong> Dynamically balances brightness and contrast across cuts
+          </span>
+        </label>
+
+        {/* Toggle 3: Snappy Motion Speed-Up */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', fontSize: '0.82rem', color: '#e2e8f0' }}>
+          <input
+            type="checkbox"
+            checked={enableScreenRecordingSpeed}
+            onChange={(e) => setEnableScreenRecordingSpeed(e.target.checked)}
+            style={{ accentColor: '#6366f1', width: '16px', height: '16px', cursor: 'pointer' }}
+          />
+          <span>
+            <strong>⚡ Snappy Motion Speed-Up (1.25x):</strong> Accelerates slow scrolling & mouse movements into brisk human-paced demos
           </span>
         </label>
       </div>

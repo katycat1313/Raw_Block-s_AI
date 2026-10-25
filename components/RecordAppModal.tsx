@@ -15,6 +15,7 @@ export const RecordAppModal: React.FC<RecordAppModalProps> = ({
 }) => {
   const [url, setUrl] = useState('https://krechetacademy.com');
   const [targetDuration, setTargetDuration] = useState(8);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1.25);
   const [actionNotes, setActionNotes] = useState('Showcase simulation interface with smooth exploration');
   const [isRecording, setIsRecording] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -43,6 +44,7 @@ export const RecordAppModal: React.FC<RecordAppModalProps> = ({
         body: JSON.stringify({
           url,
           targetDuration,
+          speedMultiplier,
           actions: [] // Default smooth showcase motion
         })
       });
@@ -151,6 +153,46 @@ export const RecordAppModal: React.FC<RecordAppModalProps> = ({
             disabled={isRecording}
             style={{ width: '100%', accentColor: '#6366f1' }}
           />
+        </div>
+
+        {/* Motion Pacing / Speed Ramping */}
+        <div style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0' }}>
+              ⚡ Motion Speed (Human Pacing)
+            </label>
+            <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
+              {speedMultiplier === 1.0 ? '1.0x Real-time' : `${speedMultiplier}x Snappy`}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+            {[
+              { val: 1.0, label: '1.0x Real-time', desc: 'Standard speed' },
+              { val: 1.25, label: '1.25x Snappy', desc: 'Human-like & brisk' },
+              { val: 1.5, label: '1.5x Fast Demo', desc: 'Punchy product speed' }
+            ].map(opt => (
+              <button
+                key={opt.val}
+                type="button"
+                onClick={() => setSpeedMultiplier(opt.val)}
+                disabled={isRecording}
+                style={{
+                  padding: '0.5rem 0.3rem',
+                  borderRadius: '8px',
+                  border: `1px solid ${speedMultiplier === opt.val ? '#6366f1' : '#334155'}`,
+                  background: speedMultiplier === opt.val ? 'rgba(99, 102, 241, 0.2)' : '#090a0f',
+                  color: speedMultiplier === opt.val ? '#ffffff' : '#94a3b8',
+                  fontSize: '0.75rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'center'
+                }}
+              >
+                <div>{opt.label}</div>
+                <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Action description */}

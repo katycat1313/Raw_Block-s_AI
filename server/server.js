@@ -178,14 +178,15 @@ app.delete('/api/clips/:id', (req, res) => {
 // -------------------------------------------------------------
 app.post('/api/record-app', async (req, res) => {
   try {
-    const { url, actions, targetDuration } = req.body;
+    const { url, actions, targetDuration, speedMultiplier } = req.body;
     if (!url) return res.status(400).json({ error: 'Target URL is required to record' });
 
-    console.log(`[Record App] Starting Playwright recording of: ${url}`);
+    console.log(`[Record App] Starting Playwright recording of: ${url} (Speed: ${speedMultiplier || 1.25}x)`);
     const recResult = await recordAppWorkflow({
       url,
       actions: actions || [],
       targetDurationSeconds: targetDuration || 8,
+      speedMultiplier: speedMultiplier ? Number(speedMultiplier) : 1.25,
       outputDir: uploadsDir
     });
 
@@ -332,7 +333,9 @@ app.post('/api/orchestrate', async (req, res) => {
       selectedVoice: selectedVoice || 'aura-orion-en',
       musicTrack: musicTrackPath,
       enableLightingEffects: enableLightingEffects ?? true,
-      enableScreenRecordingSpotlight: enableScreenRecordingSpotlight ?? true
+      enableScreenRecordingSpotlight: enableScreenRecordingSpotlight ?? true,
+      enableScreenRecordingSpeed: req.body.enableScreenRecordingSpeed ?? true,
+      screenRecordingSpeed: req.body.screenRecordingSpeed ? Number(req.body.screenRecordingSpeed) : 1.25
     });
 
     res.json({
@@ -357,7 +360,8 @@ app.post('/api/autopilot', async (req, res) => {
       selectedMusicId = 'chill_tech_ambient.mp3',
       geminiKey,
       deepgramKey,
-      recordDuration = 8
+      recordDuration = 8,
+      speedMultiplier = 1.25
     } = req.body;
 
     if (!goalPrompt) {
@@ -387,6 +391,7 @@ app.post('/api/autopilot', async (req, res) => {
         const recResult = await recordAppWorkflow({
           url,
           targetDurationSeconds: recordDuration,
+          speedMultiplier: speedMultiplier ? Number(speedMultiplier) : 1.25,
           outputDir: uploadsDir,
           onProgress: (p) => logProgress(p)
         });
@@ -515,7 +520,9 @@ app.post('/api/autopilot', async (req, res) => {
       selectedVoice: selectedVoice,
       musicTrack: musicTrackPath,
       enableLightingEffects: true,
-      enableScreenRecordingSpotlight: true
+      enableScreenRecordingSpotlight: true,
+      enableScreenRecordingSpeed: true,
+      screenRecordingSpeed: speedMultiplier ? Number(speedMultiplier) : 1.25
     });
 
     logDialogue('Showrunner', 'agreement', `Production assembly complete! Created ${edl.clips.length}-scene storyboard with Aura voiceover.`);

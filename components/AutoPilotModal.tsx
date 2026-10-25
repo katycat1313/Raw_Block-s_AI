@@ -27,6 +27,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
   );
   const [selectedVoice, setSelectedVoice] = useState('aura-orion-en');
   const [recordDuration, setRecordDuration] = useState(8);
+  const [speedMultiplier, setSpeedMultiplier] = useState(1.25);
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -63,6 +64,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
           goalPrompt,
           selectedVoice,
           recordDuration,
+          speedMultiplier,
           geminiKey,
           deepgramKey
         })
@@ -239,7 +241,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
             </div>
 
             {/* Voice & Duration Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.4rem', color: '#e2e8f0' }}>
                   🎙️ Deepgram Aura Voice
@@ -282,6 +284,45 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
                   onChange={(e) => setRecordDuration(Number(e.target.value))}
                   style={{ width: '100%', accentColor: '#6366f1', marginTop: '0.4rem' }}
                 />
+              </div>
+            </div>
+
+            {/* Motion Speed Pacing */}
+            <div style={{ marginBottom: '1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#e2e8f0' }}>
+                  ⚡ Screen Motion Pacing (Human Speed-Up)
+                </label>
+                <span style={{ fontSize: '0.78rem', color: '#10b981', fontWeight: 700 }}>
+                  {speedMultiplier === 1.0 ? '1.0x Real-time' : `${speedMultiplier}x Snappy Human`}
+                </span>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                {[
+                  { val: 1.0, label: '1.0x Standard', desc: 'Real-time speed' },
+                  { val: 1.25, label: '1.25x Snappy', desc: 'Human-like & brisk (Recommended)' },
+                  { val: 1.5, label: '1.5x Fast Demo', desc: 'Punchy showcase cadence' }
+                ].map(opt => (
+                  <button
+                    key={opt.val}
+                    type="button"
+                    onClick={() => setSpeedMultiplier(opt.val)}
+                    style={{
+                      padding: '0.5rem 0.3rem',
+                      borderRadius: '8px',
+                      border: `1px solid ${speedMultiplier === opt.val ? '#6366f1' : '#334155'}`,
+                      background: speedMultiplier === opt.val ? 'rgba(99, 102, 241, 0.2)' : '#090a0f',
+                      color: speedMultiplier === opt.val ? '#ffffff' : '#94a3b8',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'center'
+                    }}
+                  >
+                    <div>{opt.label}</div>
+                    <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px' }}>{opt.desc}</div>
+                  </button>
+                ))}
               </div>
             </div>
 

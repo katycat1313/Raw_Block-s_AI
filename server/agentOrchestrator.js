@@ -37,7 +37,9 @@ export class VideoAgentOrchestrator {
     selectedVoice = 'aura-orion-en',
     musicTrack = null,
     enableLightingEffects = true,
-    enableScreenRecordingSpotlight = true
+    enableScreenRecordingSpotlight = true,
+    enableScreenRecordingSpeed = true,
+    screenRecordingSpeed = 1.25
   }) {
     if (!clips || clips.length === 0) {
       throw new Error('At least one uploaded clip is required in the library to assemble a video.');
@@ -180,6 +182,7 @@ export class VideoAgentOrchestrator {
 
     const stylizedClips = timelineClips.map((item, idx) => {
       const effects = {};
+      let speed = 1.0;
 
       if (enableLightingEffects) {
         if (item.lightingProfile === 'underexposed') {
@@ -191,19 +194,29 @@ export class VideoAgentOrchestrator {
         }
       }
 
-      if (enableScreenRecordingSpotlight && item.contentType === 'screen_recording') {
-        effects.spotlight = true;
-        effects.zoom = true;
+      if (item.contentType === 'screen_recording') {
+        if (enableScreenRecordingSpotlight) {
+          effects.spotlight = true;
+          effects.zoom = true;
+        }
+        if (enableScreenRecordingSpeed) {
+          speed = screenRecordingSpeed || 1.25;
+        }
       }
 
       return {
         ...item,
         effects,
+        speed,
         transition: idx === 0 ? 'none' : 'fade'
       };
     });
 
-    this.log('Stylist', 'Visual FX Lead', `Visual polish locked: ${stylizedClips.filter(c => c.effects.spotlight).length} clips spotlighted, color/contrast balanced across cuts.`, 'finding');
+    const speedCount = stylizedClips.filter(c => c.speed > 1.0).length;
+    this.log('Stylist', 'Visual FX Lead', 
+      `Visual polish locked: ${stylizedClips.filter(c => c.effects.spotlight).length} clips spotlighted, ${speedCount > 0 ? `${speedCount} screen recordings accelerated by ${screenRecordingSpeed || 1.25}x for snappy human pacing` : 'standard speed'}.`, 
+      'finding'
+    );
 
     // -------------------------------------------------------------
     // Output Locked EDL (Edit Decision List)

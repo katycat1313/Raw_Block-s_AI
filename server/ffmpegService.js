@@ -167,9 +167,16 @@ export async function renderTimeline({
       for (let i = 0; i < clips.length; i++) {
         const clip = clips[i];
         const segPath = path.join(workDir, `seg_${i}.mp4`);
-        const duration = Math.max(0.5, clip.out - clip.in);
+        const targetDuration = Math.max(0.5, clip.out - clip.in);
+        const speed = clip.speed || clip.effects?.speed || 1.0;
+        const sourceSliceDuration = targetDuration * speed;
 
         const vfFilters = [];
+
+        // Apply motion speed-up if specified (e.g. 1.25x - 1.5x for snappy SaaS screen recordings)
+        if (speed && speed !== 1.0) {
+          vfFilters.push(`setpts=PTS/${speed}`);
+        }
 
         // Apply punch-in focus zoom if specified (for screen recordings)
         if (clip.effects?.zoom) {
@@ -198,9 +205,10 @@ export async function renderTimeline({
         const args = [
           '-nostdin',
           '-ss', clip.in.toString(),
-          '-t', duration.toString(),
+          '-t', sourceSliceDuration.toString(),
           '-i', clip.filePath,
           '-vf', vfFilters.join(','),
+          '-t', targetDuration.toString(),
           '-an', // Strip raw clip audio for a clean voiceover mix
           '-c:v', 'libx264',
           '-preset', 'ultrafast',

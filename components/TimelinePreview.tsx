@@ -206,6 +206,11 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
 
             {/* Effects badges */}
             <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', marginTop: 'auto', paddingTop: '0.25rem' }}>
+              {clip.speed && clip.speed > 1.0 && (
+                <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: '3px', background: 'rgba(16, 185, 129, 0.15)', color: '#34d399', fontWeight: 700 }}>
+                  ⚡ {clip.speed}x Speed
+                </span>
+              )}
               {clip.effects?.spotlight && (
                 <span style={{ fontSize: '0.65rem', padding: '1px 5px', borderRadius: '3px', background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8' }}>
                   🎯 Spotlight
