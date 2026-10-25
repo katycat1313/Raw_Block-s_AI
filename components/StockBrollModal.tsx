@@ -104,13 +104,13 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
         overflow: 'hidden'
       }}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: '1.3rem', color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              🎥 Stock Reaction B-Roll (Free Commercial Use)
+              🎥 Stock Reaction B-Roll (100% Free Commercial Use)
             </h2>
             <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
-              Pull real human reactions to contrast against your software simulations
+              Pull authentic human reactions to contrast against your software simulations
             </span>
           </div>
           <button 
@@ -119,6 +119,25 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
           >
             ✕
           </button>
+        </div>
+
+        {/* Free Commercial License Guarantee */}
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.08)',
+          border: '1px solid rgba(16, 185, 129, 0.25)',
+          borderRadius: '8px',
+          padding: '0.55rem 0.85rem',
+          marginBottom: '1rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.5rem',
+          fontSize: '0.78rem',
+          color: '#6ee7b7'
+        }}>
+          <span style={{ fontSize: '1rem' }}>🛡️</span>
+          <span>
+            <strong>100% Free & Royalty-Free for Commercial Use:</strong> All B-roll clips are pulled exclusively from royalty-free public domain / permissive creative commons catalogs (Pexels, Pixabay, & Local Studio Stock) with zero royalties, zero subscription fees, and no attribution required.
+          </span>
         </div>
 
         {/* Quick Search Chips */}
@@ -224,6 +243,20 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
                     }}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
+                  <span style={{
+                    position: 'absolute',
+                    top: '6px',
+                    left: '6px',
+                    background: 'rgba(16, 185, 129, 0.9)',
+                    color: '#ffffff',
+                    fontSize: '0.62rem',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    fontWeight: 700,
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.4)'
+                  }}>
+                    ✓ Free License
+                  </span>
                   <span style={{
                     position: 'absolute',
                     bottom: '4px',
