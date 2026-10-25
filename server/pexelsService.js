@@ -13,7 +13,7 @@ export const CURATED_REACTION_CLIPS = [
     id: 'stock-frustrated-theory',
     title: 'Frustrated Student - Outdated Lectures & Zero Practice',
     category: 'reaction',
-    tags: ['shaking head', 'frustrated', 'lectures', 'tired', 'disappointed', 'boring', 'interview'],
+    tags: ['shaking head', 'frustrated', 'lectures', 'tired', 'disappointed', 'boring', 'passive', 'theory'],
     previewUrl: '/storage/thumbnails/stock_frustrated_theory.mp4.jpg',
     videoUrl: '/storage/stock_cache/stock_frustrated_theory.mp4',
     duration: 6.5

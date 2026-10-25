@@ -390,7 +390,7 @@ app.post('/api/autopilot', async (req, res) => {
       try {
         const microResults = await recordAppMultiClips({
           url,
-          clipCount: 2, // 2 distinct micro-clips (Hero & Simulation Feature)
+          clipCount: 3, // 3 distinct micro-clips (Hero, Simulation Workshop, Portfolio & Certification)
           clipDuration: recordDuration || 3.5,
           speedMultiplier: speedMultiplier ? Number(speedMultiplier) : 1.25,
           outputDir: uploadsDir,

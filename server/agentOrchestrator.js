@@ -303,31 +303,42 @@ export class VideoAgentOrchestrator {
     }
 
     // Heuristic semantic scoring fallback
-    return beats.map(b => ({
-      clip: this.heuristicBestClip(b, clips),
-      rationale: 'Semantic keyword & action relevance'
-    }));
+    const usedIds = new Set();
+    return beats.map(b => {
+      const best = this.heuristicBestClip(b, clips, usedIds);
+      if (best) usedIds.add(best.clipId);
+      return {
+        clip: best,
+        rationale: 'Semantic keyword & action relevance'
+      };
+    });
   }
 
   /**
    * Scores clips by keyword relevance against the beat
    */
-  heuristicBestClip(beat, clips) {
+  heuristicBestClip(beat, clips, usedClipIds = new Set()) {
     const textToMatch = `${beat.text} ${beat.visualGoal || ''}`.toLowerCase();
     let bestClip = clips[0];
-    let highestScore = -1;
+    let highestScore = -999;
 
     clips.forEach(clip => {
       let score = 0;
       const titleWords = (clip.title || '').toLowerCase().split(/\s+/);
       const descWords = (clip.description || '').toLowerCase().split(/\s+/);
       const actionWords = (clip.keyActions || []).join(' ').toLowerCase().split(/\s+/);
+      const tagWords = (clip.tags || []).join(' ').toLowerCase().split(/\s+/);
 
-      [...titleWords, ...actionWords, ...descWords].forEach(word => {
-        if (word.length > 3 && textToMatch.includes(word)) {
-          score += 2;
+      [...titleWords, ...actionWords, ...descWords, ...tagWords].forEach(word => {
+        if (word.length > 2 && textToMatch.includes(word)) {
+          score += 3;
         }
       });
+
+      // Bonus for unused clips to maximize visual variety and scene diversity across the video!
+      if (!usedClipIds.has(clip.clipId)) {
+        score += 2;
+      }
 
       if (score > highestScore) {
         highestScore = score;
