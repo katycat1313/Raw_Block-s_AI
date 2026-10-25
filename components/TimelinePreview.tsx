@@ -108,12 +108,66 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
   const [isAddingVoiceover, setIsAddingVoiceover] = useState(false);
   const [voiceoverSuccess, setVoiceoverSuccess] = useState('');
 
+  // Master Stitched Video Voiceover State
+  const [activeStitchedVideoUrl, setActiveStitchedVideoUrl] = useState<string | null>(stitchedVideoUrl);
+  const [isMasterVoiceoverOpen, setIsMasterVoiceoverOpen] = useState(false);
+  const [masterVoiceoverText, setMasterVoiceoverText] = useState('');
+  const [isAddingMasterVoiceover, setIsAddingMasterVoiceover] = useState(false);
+  const [masterVoiceoverSuccess, setMasterVoiceoverSuccess] = useState('');
+
   useEffect(() => {
     setActiveVideoUrl(renderedVideoUrl);
     if (edl && edl.clips && edl.clips.length > 0) {
       setVoiceoverText(edl.clips.map((c) => c.beatText).join(' '));
     }
   }, [renderedVideoUrl, edl]);
+
+  useEffect(() => {
+    setActiveStitchedVideoUrl(stitchedVideoUrl);
+    if (seriesParts.length > 0 && !masterVoiceoverText) {
+      // Default placeholder text or combine titles
+      setMasterVoiceoverText(
+        `Welcome to The Kreative Academy. Instead of outdated theory, our students learn by executing live digital marketing campaigns with real clients and modern AI workflows. Build your portfolio, master practical automation, and future-proof your career today.`
+      );
+    }
+  }, [stitchedVideoUrl, seriesParts]);
+
+  const handleAddMasterVoiceover = async () => {
+    const targetUrl = activeStitchedVideoUrl || stitchedVideoUrl;
+    if (!targetUrl) return;
+    if (!masterVoiceoverText.trim()) {
+      alert('Please enter voiceover narration text to speak.');
+      return;
+    }
+
+    setIsAddingMasterVoiceover(true);
+    setMasterVoiceoverSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/add-voiceover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: targetUrl,
+          voiceoverText: masterVoiceoverText.trim(),
+          selectedVoice: edl?.selectedVoice || 'aura-orion-en',
+          selectedMusicId: edl?.musicTrack || selectedMusicId
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add voiceover');
+
+      setActiveStitchedVideoUrl(normalizeUrl(data.videoUrl));
+      setMasterVoiceoverSuccess('✓ Voiceover synthesized and attached to Master Video successfully!');
+      setTimeout(() => {
+        setIsMasterVoiceoverOpen(false);
+      }, 1500);
+    } catch (err: any) {
+      alert(`Error adding voiceover: ${err.message}`);
+    } finally {
+      setIsAddingMasterVoiceover(false);
+    }
+  };
 
   const handleAddVoiceover = async () => {
     if (!activeVideoUrl) return;
@@ -1029,7 +1083,8 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
             </p>
 
             <video
-              src={stitchedVideoUrl}
+              key={activeStitchedVideoUrl || stitchedVideoUrl}
+              src={activeStitchedVideoUrl || stitchedVideoUrl || undefined}
               controls
               autoPlay
               style={{
@@ -1042,27 +1097,148 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
               }}
             />
 
-            <a
-              href={stitchedVideoUrl}
-              download="master_full_length_video.mp4"
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                padding: '0.75rem 2rem',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: '#ffffff',
-                fontWeight: 800,
-                textDecoration: 'none',
-                fontSize: '0.95rem',
-                boxShadow: '0 4px 20px rgba(16, 185, 129, 0.45)'
-              }}
-            >
-              <span>⬇️</span> Download Master Full-Length MP4 (~{totalVaultDuration.toFixed(1)}s)
-            </a>
+            <div style={{ display: 'flex', gap: '0.85rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <a
+                href={activeStitchedVideoUrl || stitchedVideoUrl || undefined}
+                download="master_full_length_video.mp4"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  padding: '0.75rem 2rem',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                  color: '#ffffff',
+                  fontWeight: 800,
+                  textDecoration: 'none',
+                  fontSize: '0.95rem',
+                  boxShadow: '0 4px 20px rgba(16, 185, 129, 0.45)'
+                }}
+              >
+                <span>⬇️</span> Download Master Full-Length MP4 (~{totalVaultDuration.toFixed(1)}s)
+              </a>
+
+              {/* 🎙️ Add / Replace Voiceover on Master Video */}
+              <button
+                type="button"
+                onClick={() => setIsMasterVoiceoverOpen(!isMasterVoiceoverOpen)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.6rem',
+                  padding: '0.75rem 1.6rem',
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  fontWeight: 800,
+                  fontSize: '0.95rem',
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 20px rgba(168, 85, 247, 0.45)',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                <span>🎙️</span> {isMasterVoiceoverOpen ? 'Hide Voiceover Tool' : 'Add / Replace Voiceover'}
+              </button>
+            </div>
+
+            {/* Master Voiceover Salvage Drawer */}
+            {isMasterVoiceoverOpen && (
+              <div style={{
+                marginTop: '1.25rem',
+                background: '#0c0b14',
+                border: '1px solid #a855f7',
+                borderRadius: '12px',
+                padding: '1.25rem',
+                textAlign: 'left',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '0.75rem',
+                boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span>🎙️</span> Add Spoken Voiceover Narration to Master Video
+                    </div>
+                    <span style={{ fontSize: '0.78rem', color: '#cbd5e1' }}>
+                      Type or paste your narration below. We synthesize loud, crystal-clear speech and attach it to this ~{totalVaultDuration.toFixed(1)}s video in ~1 second!
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsMasterVoiceoverOpen(false)}
+                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem' }}
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <textarea
+                  rows={5}
+                  placeholder="Paste or type the full narration script to be spoken over the master video..."
+                  value={masterVoiceoverText}
+                  onChange={(e) => setMasterVoiceoverText(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '0.85rem',
+                    borderRadius: '8px',
+                    border: '1px solid #8b5cf6',
+                    background: '#151422',
+                    color: '#ffffff',
+                    fontSize: '0.88rem',
+                    outline: 'none',
+                    boxSizing: 'border-box',
+                    lineHeight: '1.45'
+                  }}
+                />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.76rem', color: '#a5b4fc' }}>
+                    ⚡ Instant Fast Mux: Real voice generated and mixed with ducked background music in seconds!
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleAddMasterVoiceover}
+                    disabled={isAddingMasterVoiceover || !masterVoiceoverText.trim()}
+                    style={{
+                      padding: '0.65rem 1.6rem',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #a855f7 0%, #ec4899 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 800,
+                      fontSize: '0.88rem',
+                      cursor: isAddingMasterVoiceover || !masterVoiceoverText.trim() ? 'not-allowed' : 'pointer',
+                      boxShadow: '0 4px 15px rgba(236, 72, 153, 0.4)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}
+                  >
+                    {isAddingMasterVoiceover ? (
+                      <>
+                        <span style={{ animation: 'spin 1.5s linear infinite' }}>⏳</span>
+                        Synthesizing & Attaching Voiceover...
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡</span> Salvage & Attach Voiceover to Master Film
+                      </>
+                    )}
+                  </button>
+                </div>
+
+                {masterVoiceoverSuccess && (
+                  <div style={{ fontSize: '0.84rem', color: '#34d399', fontWeight: 700, marginTop: '0.25rem' }}>
+                    {masterVoiceoverSuccess}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
