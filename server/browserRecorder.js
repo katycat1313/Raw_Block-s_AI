@@ -258,3 +258,174 @@ export async function recordAppWorkflow({
     throw err;
   }
 }
+
+/**
+ * Autonomous Multi-Clip Browser Agent:
+ * Captures 2 or 3 distinct, targeted micro-clips in a single swift browser session:
+ * 1. Hero & Value Proposition (3.5s)
+ * 2. Interactive Feature / Simulation Sandbox (3.5s)
+ * 3. Portfolio & Certification CTA (3.5s)
+ */
+export async function recordAppMultiClips({
+  url,
+  clipCount = 2, // 2 or 3 micro-clips
+  clipDuration = 3.5, // 3.5 seconds each
+  speedMultiplier = 1.25,
+  outputDir,
+  onProgress
+}) {
+  const notify = (msg) => {
+    console.log(`[MultiClipRecorder] ${msg}`);
+    if (onProgress) onProgress(msg);
+  };
+
+  notify(`Launching Playwright agent to record ${clipCount} distinct micro-clips at ${url}...`);
+
+  const tempVideoDir = path.join(outputDir, `tmp_multi_${Date.now()}`);
+  if (!fs.existsSync(tempVideoDir)) fs.mkdirSync(tempVideoDir, { recursive: true });
+
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+
+  const context = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    deviceScaleFactor: 1,
+    recordVideo: {
+      dir: tempVideoDir,
+      size: { width: 1920, height: 1080 }
+    }
+  });
+
+  const page = await context.newPage();
+
+  try {
+    notify(`Navigating to ${url}...`);
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(600);
+    await page.evaluate(CURSOR_INJECTION_SCRIPT);
+
+    const segmentTimings = [];
+
+    // --- SCENE 1: Hero & Value Proposition ---
+    notify(`Recording Take 1: Hero & Value Proposition...`);
+    const t0 = 0.2;
+    await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
+    await page.waitForTimeout(500);
+    await page.evaluate(() => window.__moveCursor && window.__moveCursor(780, 480));
+    await page.waitForTimeout(400);
+    await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 780, y: 480 });
+    await page.waitForTimeout(Math.max(1200, (clipDuration * 1000) - 1000));
+    segmentTimings.push({
+      start: t0,
+      title: 'App Hero & Value Proposition',
+      tags: ['hero', 'headline', 'introduction', 'welcome', 'platform', 'app'],
+      role: 'hero'
+    });
+
+    // --- SCENE 2: Interactive Feature / Simulation (after scroll) ---
+    notify(`Recording Take 2: Interactive Feature / Simulation Sandbox...`);
+    await page.evaluate(() => window.scrollBy({ top: 480, behavior: 'smooth' }));
+    await page.waitForTimeout(700);
+    const t1 = (clipDuration + 1.0);
+    await page.evaluate(() => window.__moveCursor && window.__moveCursor(680, 520));
+    await page.waitForTimeout(500);
+    await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 680, y: 520 });
+    await page.evaluate(() => window.__moveCursor && window.__moveCursor(1080, 540));
+    await page.waitForTimeout(Math.max(1200, (clipDuration * 1000) - 1200));
+    segmentTimings.push({
+      start: t1,
+      title: 'Interactive Client Simulation Workshop',
+      tags: ['simulation', 'workshop', 'client', 'campaign', 'features', 'practice', 'hands-on'],
+      role: 'simulation'
+    });
+
+    // --- SCENE 3 (Optional): Portfolio & Certification CTA ---
+    if (clipCount >= 3) {
+      notify(`Recording Take 3: Portfolio & Employer Verification...`);
+      await page.evaluate(() => window.scrollBy({ top: 450, behavior: 'smooth' }));
+      await page.waitForTimeout(700);
+      const t2 = (clipDuration * 2 + 2.0);
+      await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 450));
+      await page.waitForTimeout(600);
+      await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 960, y: 450 });
+      await page.waitForTimeout(Math.max(1200, (clipDuration * 1000) - 1300));
+      segmentTimings.push({
+        start: t2,
+        title: 'Verified Portfolio & Employer Certification',
+        tags: ['portfolio', 'certification', 'trust', 'employers', 'results', 'cta', 'pricing'],
+        role: 'portfolio'
+      });
+    }
+
+    notify('Closing browser and finalizing session recording...');
+    await page.close();
+    await context.close();
+    await browser.close();
+
+    const rawFiles = fs.readdirSync(tempVideoDir).filter(f => f.endsWith('.webm') || f.endsWith('.mp4'));
+    if (rawFiles.length === 0) throw new Error('Playwright did not output a video recording file.');
+    const recordedRawFile = path.join(tempVideoDir, rawFiles[0]);
+
+    // Slice raw take into multiple distinct 1080p micro-clips with speedup
+    const outputClips = [];
+    const vfFilters = [];
+    if (speedMultiplier && speedMultiplier !== 1.0) {
+      vfFilters.push(`setpts=PTS/${speedMultiplier}`);
+    }
+    vfFilters.push('scale=1920:1080:force_original_aspect_ratio=decrease');
+    vfFilters.push('pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black');
+    vfFilters.push('setsar=1');
+    vfFilters.push('fps=30');
+
+    for (let i = 0; i < segmentTimings.length; i++) {
+      const seg = segmentTimings[i];
+      const filename = `agent_micro_${Date.now()}_${i + 1}.mp4`;
+      const filePath = path.join(outputDir, filename);
+
+      notify(`Exporting Micro-Clip ${i + 1}/${segmentTimings.length}: "${seg.title}"...`);
+
+      await new Promise((resSlice, rejSlice) => {
+        const sliceArgs = [
+          '-nostdin',
+          '-ss', seg.start.toString(),
+          '-t', (clipDuration * (speedMultiplier || 1.0)).toString(),
+          '-i', recordedRawFile,
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-crf', '18',
+          '-pix_fmt', 'yuv420p',
+          '-vf', vfFilters.join(','),
+          '-t', clipDuration.toString(),
+          '-y',
+          filePath
+        ];
+        execFile(ffmpegStatic, sliceArgs, (err) => {
+          if (err) return rejSlice(err);
+          resSlice();
+        });
+      });
+
+      const meta = await getVideoMetadata(filePath);
+      outputClips.push({
+        filePath,
+        filename,
+        title: seg.title,
+        tags: seg.tags,
+        role: seg.role,
+        duration: meta.duration,
+        width: meta.width,
+        height: meta.height
+      });
+    }
+
+    try { fs.rmSync(tempVideoDir, { recursive: true, force: true }); } catch (_) {}
+    notify(`Captured ${outputClips.length} clean micro-clips successfully!`);
+    return outputClips;
+  } catch (err) {
+    try { await browser.close(); } catch (_) {}
+    try { fs.rmSync(tempVideoDir, { recursive: true, force: true }); } catch (_) {}
+    throw err;
+  }
+}

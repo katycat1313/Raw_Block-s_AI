@@ -10,7 +10,7 @@ import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbi
 import { analyzeVideoClip } from './clipVisionService.js';
 import { DEEPGRAM_VOICES } from './deepgramService.js';
 import { VideoAgentOrchestrator } from './agentOrchestrator.js';
-import { recordAppWorkflow } from './browserRecorder.js';
+import { recordAppWorkflow, recordAppMultiClips } from './browserRecorder.js';
 import { searchBrollClips, importBrollClip } from './pexelsService.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -385,47 +385,52 @@ app.post('/api/autopilot', async (req, res) => {
 
     // 1. Autonomous Screen Recording (if URL provided)
     if (url && url.startsWith('http')) {
-      logProgress(`Launching Playwright agent to record app workflow at ${url}...`);
-      logDialogue('BrowserAgent', 'action', `Recording 1080p screen interaction at ${url}...`);
+      logProgress(`Launching Playwright agent to record targeted micro-clips at ${url}...`);
+      logDialogue('BrowserAgent', 'action', `Recording multiple 1080p micro-cuts across key page sections...`);
       try {
-        const recResult = await recordAppWorkflow({
+        const microResults = await recordAppMultiClips({
           url,
-          targetDurationSeconds: recordDuration,
+          clipCount: 2, // 2 distinct micro-clips (Hero & Simulation Feature)
+          clipDuration: recordDuration || 3.5,
           speedMultiplier: speedMultiplier ? Number(speedMultiplier) : 1.25,
           outputDir: uploadsDir,
           onProgress: (p) => logProgress(p)
         });
 
-        const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        const thumbnailName = `${clipId}.jpg`;
-        const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
-        await generateThumbnail(recResult.filePath, thumbnailPath, 1.0);
+        for (const rec of microResults) {
+          const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          const thumbnailName = `${clipId}.jpg`;
+          const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+          await generateThumbnail(rec.filePath, thumbnailPath, 1.0);
 
-        let parsedHost = 'App Showcase';
-        try { parsedHost = new URL(url).hostname; } catch (_) {}
+          let parsedHost = 'App Showcase';
+          try { parsedHost = new URL(url).hostname; } catch (_) {}
 
-        const visionResult = await analyzeVideoClip({
-          filePath: recResult.filePath,
-          clipId,
-          originalFilename: `Screen Recording (${parsedHost})`,
-          geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
-          workDir: storageDir
-        });
+          const visionResult = await analyzeVideoClip({
+            filePath: rec.filePath,
+            clipId,
+            originalFilename: `${rec.title} (${parsedHost})`,
+            geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
+            workDir: storageDir
+          });
 
-        const screenClip = {
-          clipId,
-          filename: recResult.filename,
-          originalName: `Screen Recording (${parsedHost})`,
-          filePath: recResult.filePath,
-          videoUrl: `/storage/uploads/${recResult.filename}`,
-          thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
-          ...visionResult,
-          contentType: 'screen_recording'
-        };
+          const screenClip = {
+            clipId,
+            filename: rec.filename,
+            originalName: `${rec.title} (${parsedHost})`,
+            filePath: rec.filePath,
+            videoUrl: `/storage/uploads/${rec.filename}`,
+            thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
+            ...visionResult,
+            title: rec.title,
+            tags: [...(rec.tags || []), ...(visionResult.tags || [])],
+            contentType: 'screen_recording'
+          };
 
-        clipDatabase.push(screenClip);
-        newClipsAdded.push(screenClip);
-        logDialogue('BrowserAgent', 'agreement', `Recorded 1080p application showcase clip (${recResult.duration.toFixed(1)}s).`);
+          clipDatabase.push(screenClip);
+          newClipsAdded.push(screenClip);
+          logDialogue('BrowserAgent', 'agreement', `Recorded micro-clip: "${rec.title}" (${rec.duration.toFixed(1)}s).`);
+        }
       } catch (recErr) {
         console.warn('[AutoPilot] Screen recording warning:', recErr.message);
         logDialogue('BrowserAgent', 'insight', `Note: Live screen recording skipped: ${recErr.message}. Proceeding with existing clips.`);
