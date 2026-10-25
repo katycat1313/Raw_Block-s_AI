@@ -7,6 +7,7 @@ import { ApiKeyModal } from './ApiKeyModal';
 import { RecordAppModal } from './RecordAppModal';
 import { StockBrollModal } from './StockBrollModal';
 import { AutoPilotModal } from './AutoPilotModal';
+import { BlockKeyModal } from './BlockKeyModal';
 
 // Direct backend communication for high-performance video streaming & multipart uploads
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -28,6 +29,8 @@ export const AgentWorkflowPage: React.FC = () => {
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [isAutoPilotOpen, setIsAutoPilotOpen] = useState(false);
+  const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [activeProject, setActiveProject] = useState('krechet_academy');
 
   // Director & Script State
   const [userPrompt, setUserPrompt] = useState('Create a clean, engaging walkthrough of the application workflow and final export.');
@@ -172,6 +175,7 @@ export const AgentWorkflowPage: React.FC = () => {
       const clipsRes = await fetch(`${API_BASE}/api/clips`);
       if (clipsRes.ok) {
         const cData = await clipsRes.json();
+        if (cData.project) setActiveProject(cData.project);
         const mappedClips = (cData.clips || []).map((c: any) => ({
           ...c,
           videoUrl: normalizeUrl(c.videoUrl),
@@ -505,6 +509,8 @@ export const AgentWorkflowPage: React.FC = () => {
             isUploading={isUploading}
             onOpenRecordModal={() => setIsRecordModalOpen(true)}
             onOpenStockModal={() => setIsStockModalOpen(true)}
+            onOpenKeyModal={() => setIsKeyModalOpen(true)}
+            activeProject={activeProject}
           />
 
           {/* Panel 2: Director Studio (Prompt, Script Modes, Audio & Effects) */}
@@ -598,6 +604,16 @@ export const AgentWorkflowPage: React.FC = () => {
             deepgramKeySet: !!keys.deepgramKey,
             pexelsKeySet: false
           });
+        }}
+      />
+
+      {/* Block Key & Project Folder Modal */}
+      <BlockKeyModal
+        isOpen={isKeyModalOpen}
+        onClose={() => setIsKeyModalOpen(false)}
+        apiBase={API_BASE}
+        onProjectSwitched={() => {
+          fetchInitialData();
         }}
       />
     </div>

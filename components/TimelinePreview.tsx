@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { getBlockRole } from './ClipLibrary';
 
 export interface TimelineClip {
   beatIndex: number;
@@ -279,28 +280,43 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
             gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
             gap: '0.85rem'
           }}>
-            {edl.clips.map((clip, idx) => (
-              <div
-                key={idx}
-                style={{
-                  background: '#181824',
-                  border: '1px solid #28283a',
-                  borderRadius: '10px',
-                  padding: '0.85rem',
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '0.5rem'
-                }}
-              >
-                {/* Beat Header */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#818cf8' }}>
-                    SCENE #{idx + 1}
-                  </span>
-                  <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#090a0f', padding: '2px 6px', borderRadius: '4px' }}>
-                    {clip.duration.toFixed(1)}s ({clip.in.toFixed(1)}s - {clip.out.toFixed(1)}s)
-                  </span>
-                </div>
+            {edl.clips.map((clip, idx) => {
+              const role = getBlockRole({ title: clip.title, description: clip.beatText });
+              return (
+                <div
+                  key={idx}
+                  style={{
+                    background: '#181824',
+                    border: `1px solid ${role.badgeBorder || '#28283a'}`,
+                    borderRadius: '10px',
+                    padding: '0.85rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem'
+                  }}
+                >
+                  {/* Beat Header */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#818cf8' }}>
+                        SCENE #{idx + 1}
+                      </span>
+                      <span style={{
+                        fontSize: '0.65rem',
+                        fontWeight: 800,
+                        padding: '1px 6px',
+                        borderRadius: '4px',
+                        background: role.badgeBg,
+                        color: role.badgeColor,
+                        border: `1px solid ${role.badgeBorder}`
+                      }}>
+                        {role.icon} {role.label}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: '0.72rem', color: '#94a3b8', background: '#090a0f', padding: '2px 6px', borderRadius: '4px' }}>
+                      {clip.duration.toFixed(1)}s ({clip.in.toFixed(1)}s - {clip.out.toFixed(1)}s)
+                    </span>
+                  </div>
 
                 {/* Voiceover Line */}
                 <p style={{
@@ -349,7 +365,7 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                   </span>
                 </div>
               </div>
-            ))}
+            );})}
           </div>
 
           {/* Render Action Button */}

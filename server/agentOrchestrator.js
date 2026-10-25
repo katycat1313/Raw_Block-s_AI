@@ -178,6 +178,7 @@ export class VideoAgentOrchestrator {
         clipId: chosenClip.clipId,
         title: chosenClip.title,
         filePath: chosenClip.filePath,
+        blockCode: chosenClip.blockCode || null,
         contentType: chosenClip.contentType,
         lightingProfile: chosenClip.lightingProfile,
         in: startIn,
@@ -353,6 +354,14 @@ export class VideoAgentOrchestrator {
           score += 3;
         }
       });
+
+      // Direct block code matching: e.g. [A1], A1, B2, C1, etc.
+      if (clip.blockCode) {
+        const codeRegex = new RegExp(`(?:\\[|\\b)${clip.blockCode}(?:\\]|\\b)`, 'i');
+        if (codeRegex.test(textToMatch)) {
+          score += 100; // Overwhelming priority for explicit block code instruction!
+        }
+      }
 
       // Bonus for unused clips to maximize visual variety and scene diversity across the video!
       if (!usedClipIds.has(clip.clipId)) {

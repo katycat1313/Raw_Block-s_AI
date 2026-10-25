@@ -12,6 +12,7 @@ import { DEEPGRAM_VOICES } from './deepgramService.js';
 import { VideoAgentOrchestrator } from './agentOrchestrator.js';
 import { recordAppWorkflow, recordAppMultiClips } from './browserRecorder.js';
 import { searchBrollClips, importBrollClip } from './pexelsService.js';
+import { assignBlockTaxonomy, syncProjectKeyFile, CATEGORY_DEFINITIONS } from './projectKeyService.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,6 +48,8 @@ if (!fs.existsSync(defaultSampleMusicPath)) {
 // Catalog of uploaded clips with disk persistence
 const clipsDbPath = path.join(storageDir, 'clips.json');
 let clipDatabase = [];
+let currentProject = 'krechet_academy';
+let currentAppUrl = 'https://krechetacademy.com';
 
 function saveClipDatabase() {
   try {
@@ -211,9 +214,87 @@ app.post('/api/upload', (req, res, next) => {
   }
 });
 
-// Get all uploaded clips
+// Get all uploaded clips (auto-categorized and enriched with block taxonomy)
 app.get('/api/clips', (req, res) => {
-  res.json({ clips: clipDatabase });
+  const enriched = assignBlockTaxonomy(clipDatabase);
+  try {
+    syncProjectKeyFile({
+      storageDir,
+      projectName: currentProject,
+      appUrl: currentAppUrl,
+      clips: enriched
+    });
+  } catch (err) {
+    console.warn('[ProjectKey] Warning syncing key file:', err.message);
+  }
+  res.json({ clips: enriched, project: currentProject, appUrl: currentAppUrl });
+});
+
+// Get active project metadata and BLOCK_KEY.txt content
+app.get('/api/project', (req, res) => {
+  const enriched = assignBlockTaxonomy(clipDatabase);
+  const syncRes = syncProjectKeyFile({
+    storageDir,
+    projectName: currentProject,
+    appUrl: currentAppUrl,
+    clips: enriched
+  });
+
+  const projectsDir = path.join(storageDir, 'projects');
+  let availableProjects = [];
+  try {
+    availableProjects = fs.readdirSync(projectsDir).filter(f => {
+      try { return fs.statSync(path.join(projectsDir, f)).isDirectory(); } catch (_) { return false; }
+    });
+  } catch (_) {}
+
+  res.json({
+    currentProject,
+    currentAppUrl,
+    keyContent: syncRes.keyContent,
+    keyPath: syncRes.keyPath,
+    availableProjects: availableProjects.length > 0 ? availableProjects : [currentProject],
+    categories: CATEGORY_DEFINITIONS,
+    totalClips: enriched.length
+  });
+});
+
+// Download raw BLOCK_KEY.txt
+app.get('/api/project/key', (req, res) => {
+  const enriched = assignBlockTaxonomy(clipDatabase);
+  const syncRes = syncProjectKeyFile({
+    storageDir,
+    projectName: currentProject,
+    appUrl: currentAppUrl,
+    clips: enriched
+  });
+  res.download(syncRes.keyPath, `${currentProject}_BLOCK_KEY.txt`);
+});
+
+// Switch or create project folder
+app.post('/api/project/switch', (req, res) => {
+  const { projectName, appUrl } = req.body;
+  if (!projectName) return res.status(400).json({ error: 'Project name is required' });
+
+  const cleanName = projectName.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  currentProject = cleanName;
+  if (appUrl) currentAppUrl = appUrl.trim();
+
+  const enriched = assignBlockTaxonomy(clipDatabase);
+  const syncRes = syncProjectKeyFile({
+    storageDir,
+    projectName: currentProject,
+    appUrl: currentAppUrl,
+    clips: enriched
+  });
+
+  res.json({
+    success: true,
+    currentProject,
+    currentAppUrl,
+    keyContent: syncRes.keyContent,
+    keyPath: syncRes.keyPath
+  });
 });
 
 // Delete a clip
