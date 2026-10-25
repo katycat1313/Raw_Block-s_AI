@@ -1,405 +1,527 @@
-import React, { useState, useRef } from 'react';
-import './AgentWorkflowPage.css';
-import { AgentOrchestrator } from '../services/agentOrchestrator';
-import { RunwayService } from '../services/runwayService';
-import { CountdownSlot, ProductDossier, SocialStrategy, DialogueEvent, OptimizedPrompt, Platform } from '../types';
-import BoardroomMonitor from './BoardroomMonitor';
-import ConversionDashboard from './ConversionDashboard';
-import ViralPublisher from './ViralPublisher';
+import React, { useState, useEffect } from 'react';
+import { ClipLibrary, VideoClip } from './ClipLibrary';
+import { DirectorStudio, DeepgramVoice, MusicTrack } from './DirectorStudio';
+import { TimelinePreview, EDL } from './TimelinePreview';
+import { BoardroomModal, DialogueEvent } from './BoardroomModal';
+import { ApiKeyModal } from './ApiKeyModal';
+import { RecordAppModal } from './RecordAppModal';
+import { StockBrollModal } from './StockBrollModal';
+import { AutoPilotModal } from './AutoPilotModal';
 
-type ApprovedResults = { slots: CountdownSlot[]; dossier: ProductDossier; strategy: SocialStrategy };
-type VideoGenState = { status: 'idle' | 'generating' | 'done' | 'error'; videoUrl?: string; error?: string };
+// Direct backend communication for high-performance video streaming & multipart uploads
+const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+  ? `http://${window.location.hostname}:3001`
+  : '';
 
-const MasterSequence: React.FC<{ slots: CountdownSlot[]; videoGenStates: Record<string, VideoGenState> }> = ({ slots, videoGenStates }) => {
-    const [activeIndex, setActiveIndex] = useState(0);
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const doneSlots = slots.filter(s => videoGenStates[s.id]?.status === 'done');
-
-    const handleEnded = () => {
-        if (activeIndex < doneSlots.length - 1) {
-            setActiveIndex(i => i + 1);
-        }
-    };
-
-    React.useEffect(() => {
-        videoRef.current?.load();
-        videoRef.current?.play().catch(() => {});
-    }, [activeIndex]);
-
-    const activeSlot = doneSlots[activeIndex];
-    const activeUrl = videoGenStates[activeSlot?.id]?.videoUrl || '';
-
-    return (
-        <div style={{ marginBottom: '2rem', padding: '1.5rem', border: '1px solid var(--primary)', borderRadius: '16px', background: 'rgba(99,102,241,0.05)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                <h3 style={{ margin: 0, color: 'var(--primary)' }}>Shot Library — {doneSlots.length} B-Roll Clips Ready</h3>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {doneSlots.map((s, i) => (
-                        <a
-                            key={s.id}
-                            href={videoGenStates[s.id]?.videoUrl}
-                            download={`shot-${s.rank}.mp4`}
-                            target="_blank"
-                            rel="noreferrer"
-                            style={{ fontSize: '0.7rem', color: 'var(--primary)', border: '1px solid var(--primary)', borderRadius: '4px', padding: '0.15rem 0.4rem', textDecoration: 'none' }}
-                        >
-                            #{s.rank}
-                        </a>
-                    ))}
-                </div>
-            </div>
-            <video
-                ref={videoRef}
-                src={activeUrl}
-                controls
-                autoPlay
-                onEnded={handleEnded}
-                style={{ width: '100%', maxWidth: '600px', borderRadius: '10px', display: 'block', margin: '0 auto' }}
-            />
-            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                {doneSlots.map((s, i) => (
-                    <button
-                        key={s.id}
-                        onClick={() => setActiveIndex(i)}
-                        style={{
-                            padding: '0.25rem 0.6rem',
-                            fontSize: '0.7rem',
-                            borderRadius: '6px',
-                            border: 'none',
-                            cursor: 'pointer',
-                            background: i === activeIndex ? 'var(--primary)' : 'rgba(99,102,241,0.15)',
-                            color: 'white',
-                        }}
-                    >
-                        Shot #{s.rank}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
+const normalizeUrl = (url?: string | null) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url}`;
 };
 
-const AgentWorkflowPage = () => {
-    const [productUrl, setProductUrl] = useState('https://www.amazon.com/dp/B0CQ3N353H');
-    const [videoUrl, setVideoUrl] = useState('https://www.youtube.com/watch?v=cc-u-5-2-4A');
-    const [isBoardroomOpen, setIsBoardroomOpen] = useState(false);
-    const [isLoading, setIsLoading] = useState(false);
-    const [status, setStatus] = useState('');
-    const [dialogue, setDialogue] = useState<DialogueEvent[]>([]);
-    const [results, setResults] = useState<ApprovedResults | null>(null);
-    const [approvedResults, setApprovedResults] = useState<ApprovedResults | null>(null);
-    const [videoGenStates, setVideoGenStates] = useState<Record<string, VideoGenState>>({});
+export const AgentWorkflowPage: React.FC = () => {
+  // Clip Library State
+  const [clips, setClips] = useState<VideoClip[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
 
-    const handleStartAgents = async () => {
-        if (!productUrl || !videoUrl) {
-            alert("Please enter both a Product and Video URL first!");
-            return;
-        }
+  // Automated Creation Modals
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [isStockModalOpen, setIsStockModalOpen] = useState(false);
+  const [isAutoPilotOpen, setIsAutoPilotOpen] = useState(false);
 
-        setIsBoardroomOpen(true);
-        setIsLoading(true);
-        setDialogue([]);
-        setResults(null);
-        setApprovedResults(null);
-        setVideoGenStates({});
-        setStatus('Initializing Agent Team...');
+  // Director & Script State
+  const [userPrompt, setUserPrompt] = useState('Create a clean, engaging walkthrough of the application workflow and final export.');
+  const [scriptMode, setScriptMode] = useState<'prompt_generate' | 'rewrite' | 'user_direct'>('prompt_generate');
+  const [rawScript, setRawScript] = useState('');
 
-        try {
-            const orchestratorResults = await AgentOrchestrator.orchestrate(
-                productUrl,
-                videoUrl,
-                (msg) => setStatus(msg),
-                (event) => setDialogue(prev => [...prev, { ...event, timestamp: Date.now() }])
-            );
-            setResults(orchestratorResults);
-            setStatus('Boardroom Deliberation Complete. Awaiting Approval.');
-        } catch (error: any) {
-            console.error("Agent orchestration failed:", error);
-            setStatus(`❌ Mission Failed: ${error.message}`);
-            setDialogue(prev => [...prev, {
-                agent: 'System',
-                role: 'Error Handler',
-                message: `The agent mission failed. Reason: ${error.message}`,
-                type: 'thought',
-                timestamp: Date.now()
-            }]);
-        } finally {
-            setIsLoading(false);
-        }
+  // Audio & Voice State
+  const [voices, setVoices] = useState<DeepgramVoice[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState('aura-orion-en');
+  const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
+  const [selectedMusicId, setSelectedMusicId] = useState('');
+
+  // FX & Lighting Controls
+  const [enableLightingEffects, setEnableLightingEffects] = useState(true);
+  const [enableScreenRecordingSpotlight, setEnableScreenRecordingSpotlight] = useState(true);
+
+  // Orchestration & Dialogue State
+  const [isOrchestrating, setIsOrchestrating] = useState(false);
+  const [isBoardroomOpen, setIsBoardroomOpen] = useState(false);
+  const [dialogue, setDialogue] = useState<DialogueEvent[]>([]);
+  const [orchestratorStatus, setOrchestratorStatus] = useState('');
+  const [isOrchestrationComplete, setIsOrchestrationComplete] = useState(false);
+
+  // Timeline & Render State
+  const [edl, setEdl] = useState<EDL | null>(null);
+  const [isRendering, setIsRendering] = useState(false);
+  const [renderProgress, setRenderProgress] = useState('');
+  const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
+
+  // Settings Modal & API Status
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [backendHealth, setBackendHealth] = useState<{
+    geminiKeySet: boolean;
+    deepgramKeySet: boolean;
+    pexelsKeySet: boolean;
+  }>({ geminiKeySet: false, deepgramKeySet: false, pexelsKeySet: false });
+
+  // Initial Data Fetch
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const fetchInitialData = async () => {
+    try {
+      // 1. Health check
+      const healthRes = await fetch(`${API_BASE}/api/health`);
+      if (healthRes.ok) {
+        const data = await healthRes.json();
+        const localGemini = localStorage.getItem('GEMINI_API_KEY');
+        const localDeepgram = localStorage.getItem('DEEPGRAM_API_KEY');
+        const localPexels = localStorage.getItem('PEXELS_API_KEY');
+        setBackendHealth({
+          geminiKeySet: data.geminiKeySet || !!localGemini,
+          deepgramKeySet: data.deepgramKeySet || !!localDeepgram,
+          pexelsKeySet: data.pexelsKeySet || !!localPexels
+        });
+      }
+
+      // 2. Fetch Deepgram Voices
+      const voicesRes = await fetch(`${API_BASE}/api/voices`);
+      if (voicesRes.ok) {
+        const vData = await voicesRes.json();
+        setVoices(vData.voices || []);
+      }
+
+      // 3. Fetch Background Music
+      const musicRes = await fetch(`${API_BASE}/api/music`);
+      if (musicRes.ok) {
+        const mData = await musicRes.json();
+        setMusicTracks(mData.tracks || []);
+      }
+
+      // 4. Fetch existing uploaded clips
+      const clipsRes = await fetch(`${API_BASE}/api/clips`);
+      if (clipsRes.ok) {
+        const cData = await clipsRes.json();
+        const mappedClips = (cData.clips || []).map((c: any) => ({
+          ...c,
+          videoUrl: normalizeUrl(c.videoUrl),
+          thumbnailUrl: normalizeUrl(c.thumbnailUrl)
+        }));
+        setClips(mappedClips);
+      }
+    } catch (err) {
+      console.warn('Initial data fetch warning:', err);
+    }
+  };
+
+  // Upload Clips Handler
+  const handleUploadClips = async (files: FileList) => {
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append('videos', files[i]);
+      }
+
+      const geminiKey = localStorage.getItem('GEMINI_API_KEY') || '';
+      const headers: Record<string, string> = {};
+      if (geminiKey) headers['x-gemini-key'] = geminiKey;
+
+      const res = await fetch(`${API_BASE}/api/upload`, {
+        method: 'POST',
+        headers,
+        body: formData
+      });
+
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (jsonErr) {
+        throw new Error(`Server returned unexpected response (${res.status}): ${responseText.substring(0, 120)}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || `Upload failed with status ${res.status}`);
+      }
+
+      const newClips = (data.clips || []).map((c: any) => ({
+        ...c,
+        videoUrl: normalizeUrl(c.videoUrl),
+        thumbnailUrl: normalizeUrl(c.thumbnailUrl)
+      }));
+
+      setClips((prev) => [...prev, ...newClips]);
+    } catch (err: any) {
+      alert(`Upload error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Delete Clip Handler
+  const handleDeleteClip = async (clipId: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/clips/${clipId}`, { method: 'DELETE' });
+      if (res.ok) {
+        setClips((prev) => prev.filter((c) => c.clipId !== clipId));
+      }
+    } catch (err: any) {
+      console.error('Delete clip error:', err);
+    }
+  };
+
+  // Add Clip from Playwright or Stock B-Roll
+  const handleAddNewClip = (rawClip: any) => {
+    const formatted = {
+      ...rawClip,
+      videoUrl: normalizeUrl(rawClip.videoUrl),
+      thumbnailUrl: normalizeUrl(rawClip.thumbnailUrl)
     };
+    setClips((prev) => [formatted, ...prev]);
+  };
 
-    const handleApprove = () => {
-        if (!results) return;
-        setApprovedResults(results);
-        setIsBoardroomOpen(false);
-    };
+  // Orchestrate Video Production
+  const handleStartOrchestration = async () => {
+    if (clips.length === 0) {
+      alert('Please upload, record, or import at least one video clip first.');
+      return;
+    }
 
-    const handleGenerateVideo = async (slot: CountdownSlot) => {
-        if (!slot.generated.videoPrompt) return;
+    setIsOrchestrating(true);
+    setIsBoardroomOpen(true);
+    setIsOrchestrationComplete(false);
+    setDialogue([]);
+    setOrchestratorStatus('Deploying multi-agent production team...');
 
-        setVideoGenStates(prev => ({ ...prev, [slot.id]: { status: 'generating' } }));
+    try {
+      const geminiKey = localStorage.getItem('GEMINI_API_KEY') || '';
+      const deepgramKey = localStorage.getItem('DEEPGRAM_API_KEY') || '';
 
-        try {
-            const videoUrl = await RunwayService.generateVideo(
-                slot.generated.videoPrompt,
-                slot.generated.imageUrl
-            );
-            setVideoGenStates(prev => ({ ...prev, [slot.id]: { status: 'done', videoUrl } }));
-        } catch (err: any) {
-            setVideoGenStates(prev => ({ ...prev, [slot.id]: { status: 'error', error: err.message } }));
-        }
-    };
+      const res = await fetch(`${API_BASE}/api/orchestrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userPrompt,
+          scriptMode,
+          rawScript,
+          selectedVoice,
+          selectedMusicId,
+          enableLightingEffects,
+          enableScreenRecordingSpotlight,
+          geminiKey,
+          deepgramKey
+        })
+      });
 
-    const handleGenerateAll = async (slots: CountdownSlot[]) => {
-        for (const slot of slots) {
-            if (!slot.generated.videoPrompt) continue;
-            const current = videoGenStates[slot.id];
-            if (current?.status === 'done' || current?.status === 'generating') continue;
-            await handleGenerateVideo(slot);
-        }
-    };
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (_) {
+        throw new Error(`Server returned unexpected response (${res.status}): ${responseText.substring(0, 120)}`);
+      }
 
-    const buildPostApprovalData = (ar: ApprovedResults) => {
-        const { slots, dossier, strategy } = ar;
+      if (!res.ok) {
+        throw new Error(data.error || 'Agent orchestration failed');
+      }
 
-        const safeStrategy: SocialStrategy = {
-            ...strategy,
-            caption: strategy.caption || 'Shop now — link in bio!',
-            hashtags: strategy.hashtags?.length ? strategy.hashtags : ['#viral', '#trending', '#musthave'],
-            firstComment: strategy.firstComment || 'Drop a ❤️ if you want one!',
-            bestTime: strategy.bestTime || '6PM–9PM',
-        };
+      setDialogue(data.dialogue || []);
+      setEdl(data.edl);
+      setIsOrchestrationComplete(true);
+      setOrchestratorStatus('Master timeline successfully locked and approved.');
+    } catch (err: any) {
+      alert(`Orchestration error: ${err.message}`);
+      setOrchestratorStatus(`Error: ${err.message}`);
+    } finally {
+      setIsOrchestrating(false);
+    }
+  };
 
-        const optimized: OptimizedPrompt = {
-            videoPrompt: slots[0]?.generated.videoPrompt || '',
-            imagePrompt: slots[0]?.generated.imagePrompt || '',
-            hook: strategy.angle || 'Scroll-stopping product reveal',
-            audioScript: slots[0]?.generated.script || '',
-            conversionStrategy: strategy.angle || '',
-            visualBrief: dossier.visualDna,
-            psychologicalAngle: strategy.angle || '',
-            conversionScore: Math.min(95, 60 + (dossier.features?.length || 0) * 3),
-            triggers: strategy.psychologicalTriggers || [],
-            variations: [],
-            launchCalendar: [],
-            social: {
-                [Platform.TIKTOK]: safeStrategy,
-                [Platform.YOUTUBE]: safeStrategy,
-                [Platform.INSTAGRAM]: safeStrategy,
-            },
-            researchData: {
-                painPoints: dossier.painPoints || [],
-                competitorWeakness: dossier.reviews?.slice(0, 3) || [],
-                winningHookPatterns: strategy.psychologicalTriggers || [],
-                sentimentScore: 72,
-                buyerIntentSignals: dossier.features?.slice(0, 4) || [],
-            },
-        };
+  // Render Final Video with FFmpeg
+  const handleRenderVideo = async () => {
+    if (!edl) return;
+    setIsRendering(true);
+    setRenderProgress('Initializing FFmpeg render pipeline...');
+    setRenderedVideoUrl(null);
 
-        const viralStrategies: Record<Platform, SocialStrategy> = {
-            [Platform.TIKTOK]: safeStrategy,
-            [Platform.YOUTUBE]: safeStrategy,
-            [Platform.INSTAGRAM]: safeStrategy,
-        };
+    try {
+      const res = await fetch(`${API_BASE}/api/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ edl })
+      });
 
-        return { optimized, viralStrategies };
-    };
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (_) {
+        throw new Error(`Server returned unexpected response (${res.status}): ${responseText.substring(0, 120)}`);
+      }
 
-    const postApproval = approvedResults ? buildPostApprovalData(approvedResults) : null;
-    const runwayConfigured = RunwayService.isConfigured();
+      if (!res.ok) {
+        throw new Error(data.error || 'Video rendering failed');
+      }
 
-    return (
-        <div className="agent-workflow-page">
-            <div className="form-group">
-                <label htmlFor="product-url">Product URL:</label>
-                <input
-                    type="text"
-                    id="product-url"
-                    value={productUrl}
-                    onChange={(e) => setProductUrl(e.target.value)}
-                    placeholder="e.g., https://www.amazon.com/dp/B0CQ3N353H"
-                />
-            </div>
-            <div className="form-group">
-                <label htmlFor="video-url">Reference Video URL:</label>
-                <input
-                    type="text"
-                    id="video-url"
-                    value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                    placeholder="e.g., https://www.youtube.com/watch?v=cc-u-5-2-4A"
-                />
-            </div>
-            <button onClick={handleStartAgents} disabled={isLoading}>
-                {isLoading ? 'Agents are Working...' : 'Start Agents'}
-            </button>
+      setRenderedVideoUrl(normalizeUrl(data.videoUrl));
+      setRenderProgress('Render complete!');
+    } catch (err: any) {
+      alert(`Render error: ${err.message}`);
+      setRenderProgress(`Failed: ${err.message}`);
+    } finally {
+      setIsRendering(false);
+    }
+  };
 
-            <BoardroomMonitor
-                isOpen={isBoardroomOpen}
-                logs={dialogue}
-                status={status}
-                onClose={() => setIsBoardroomOpen(false)}
-                onApprove={handleApprove}
-                canApprove={!isLoading && results !== null}
-            />
+  const handleAutoPilotComplete = (result: any) => {
+    if (result.allClips) {
+      setClips(result.allClips.map((c: any) => ({
+        ...c,
+        videoUrl: normalizeUrl(c.videoUrl) || c.videoUrl,
+        thumbnailUrl: normalizeUrl(c.thumbnailUrl)
+      })));
+    }
+    if (result.edl) {
+      setEdl(result.edl);
+    }
+    if (result.dialogue) {
+      setDialogue(result.dialogue);
+    }
+    setRenderedVideoUrl(null);
+    setIsBoardroomOpen(true);
+  };
 
-            {approvedResults && postApproval && (
-                <div style={{ marginTop: '3rem' }}>
-                    <h2 className="title">{approvedResults.dossier.productName}</h2>
-                    <p style={{ color: 'var(--muted)', textAlign: 'center', marginBottom: '0.5rem' }}>
-                        Strategy: <strong style={{ color: 'var(--primary)' }}>{approvedResults.strategy.angle}</strong>
-                        {' · '}
-                        Target: <strong style={{ color: 'var(--secondary)' }}>{approvedResults.strategy.targetAudience}</strong>
-                    </p>
-                    <p style={{ color: 'var(--muted)', textAlign: 'center', marginBottom: '2rem' }}>
-                        {approvedResults.slots.length} b-roll shots queued for generation
-                    </p>
-
-                    {!runwayConfigured && (
-                        <div style={{
-                            background: 'rgba(234,179,8,0.1)',
-                            border: '1px solid rgba(234,179,8,0.3)',
-                            borderRadius: '12px',
-                            padding: '0.75rem 1rem',
-                            marginBottom: '1.5rem',
-                            color: '#ca8a04',
-                            fontSize: '0.8rem',
-                        }}>
-                            <strong>Runway API not configured.</strong> Add <code>VITE_RUNWAY_API_URL</code> and <code>VITE_RUNWAY_API_KEY</code> to your <code>.env</code> file to enable video generation.
-                        </div>
-                    )}
-
-                    {/* Video Block Prompts */}
-                    <div className="prompts-container" style={{ marginBottom: '2rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-                            <h3 style={{ margin: 0, color: 'var(--primary)' }}>B-Roll Shot Prompts</h3>
-                            {runwayConfigured && (
-                                <button
-                                    onClick={() => handleGenerateAll(approvedResults.slots)}
-                                    disabled={approvedResults.slots.every(s => {
-                                        const st = videoGenStates[s.id]?.status;
-                                        return st === 'done' || st === 'generating';
-                                    })}
-                                    style={{
-                                        padding: '0.4rem 1rem',
-                                        fontSize: '0.75rem',
-                                        borderRadius: '8px',
-                                        border: 'none',
-                                        cursor: 'pointer',
-                                        background: 'var(--primary)',
-                                        color: 'white',
-                                    }}
-                                >
-                                    Generate All Shots
-                                </button>
-                            )}
-                        </div>
-                        {approvedResults.slots.map((slot) => {
-                            const genState = videoGenStates[slot.id] || { status: 'idle' };
-                            return (
-                                <div key={slot.id} style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid var(--border)' }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.25rem' }}>
-                                        <p className="prompt" style={{ margin: 0 }}>
-                                            <strong>Shot #{slot.rank}</strong>
-                                            {slot.category && (
-                                                <span style={{ color: 'var(--muted)', fontSize: '0.8rem', marginLeft: '0.5rem' }}>
-                                                    [{slot.category}]
-                                                </span>
-                                            )}
-                                        </p>
-                                        {slot.generated.videoPrompt && genState.status !== 'done' && (
-                                            <button
-                                                onClick={() => handleGenerateVideo(slot)}
-                                                disabled={genState.status === 'generating' || !runwayConfigured}
-                                                style={{
-                                                    padding: '0.3rem 0.75rem',
-                                                    fontSize: '0.75rem',
-                                                    borderRadius: '8px',
-                                                    border: 'none',
-                                                    cursor: genState.status === 'generating' || !runwayConfigured ? 'not-allowed' : 'pointer',
-                                                    background: genState.status === 'generating' ? 'rgba(99,102,241,0.3)' : 'var(--primary)',
-                                                    color: 'white',
-                                                    flexShrink: 0,
-                                                    marginLeft: '1rem',
-                                                }}
-                                            >
-                                                {genState.status === 'generating' ? 'Generating...' : 'Generate Video'}
-                                            </button>
-                                        )}
-                                    </div>
-                                    <p style={{ color: 'var(--muted)', fontSize: '0.85rem', margin: '0 0 0.5rem 0' }}>
-                                        {slot.generated.videoPrompt}
-                                    </p>
-                                    {slot.generated.imageUrl && (
-                                        <img
-                                            src={slot.generated.imageUrl}
-                                            alt={`Shot ${slot.rank} reference frame`}
-                                            style={{ maxHeight: '120px', borderRadius: '4px', marginBottom: '0.5rem' }}
-                                        />
-                                    )}
-                                    {genState.status === 'generating' && (
-                                        <p style={{ color: 'var(--primary)', fontSize: '0.8rem', margin: 0 }}>
-                                            Submitting to Runway... polling for result (up to 10 min)
-                                        </p>
-                                    )}
-                                    {genState.status === 'error' && (
-                                        <p style={{ color: '#f87171', fontSize: '0.8rem', margin: 0 }}>
-                                            Error: {genState.error}
-                                        </p>
-                                    )}
-                                    {genState.status === 'done' && genState.videoUrl && (
-                                        <div>
-                                            <video
-                                                src={genState.videoUrl}
-                                                controls
-                                                style={{ width: '100%', maxWidth: '480px', borderRadius: '8px', marginTop: '0.5rem' }}
-                                            />
-                                            <a
-                                                href={genState.videoUrl}
-                                                download={`shot-${slot.rank}.mp4`}
-                                                target="_blank"
-                                                rel="noreferrer"
-                                                style={{
-                                                    display: 'inline-block',
-                                                    marginTop: '0.4rem',
-                                                    fontSize: '0.75rem',
-                                                    color: 'var(--primary)',
-                                                    textDecoration: 'none',
-                                                    border: '1px solid var(--primary)',
-                                                    borderRadius: '6px',
-                                                    padding: '0.2rem 0.6rem',
-                                                }}
-                                            >
-                                                Download Shot #{slot.rank}
-                                            </a>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })}
-                    </div>
-
-                    {/* Shot Library viewer — shown when all shots are generated */}
-                    {(() => {
-                        const doneSlots = approvedResults.slots.filter(s => videoGenStates[s.id]?.status === 'done');
-                        const allDone = doneSlots.length === approvedResults.slots.length && doneSlots.length > 0;
-                        if (!allDone) return null;
-                        return (
-                            <MasterSequence slots={approvedResults.slots} videoGenStates={videoGenStates} />
-                        );
-                    })()}
-
-                    {/* Conversion Intelligence Dashboard */}
-                    <ConversionDashboard optimized={postApproval.optimized} />
-
-                    {/* Viral Publisher Hub */}
-                    <div style={{ marginTop: '2rem' }}>
-                        <ViralPublisher strategies={postApproval.viralStrategies} />
-                    </div>
-                </div>
-            )}
+  return (
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#0a0a0f',
+      color: '#f8fafc',
+      padding: '1.5rem',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif"
+    }}>
+      {/* Top Navigation Bar */}
+      <header style={{
+        maxWidth: '1400px',
+        margin: '0 auto 1.5rem auto',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        background: '#121217',
+        border: '1px solid #23232f',
+        borderRadius: '16px',
+        padding: '1rem 1.5rem'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <div style={{
+            width: '40px',
+            height: '40px',
+            borderRadius: '10px',
+            background: 'linear-gradient(135deg, #6366f1, #ec4899)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '1.3rem'
+          }}>
+            🎬
+          </div>
+          <div>
+            <h1 style={{
+              margin: 0,
+              fontSize: '1.3rem',
+              fontWeight: 800,
+              letterSpacing: '-0.5px',
+              background: 'linear-gradient(90deg, #818cf8, #f472b6)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent'
+            }}>
+              Raw Blocks AI Studio
+            </h1>
+            <span style={{ fontSize: '0.76rem', color: '#94a3b8' }}>
+              Semantic Video Assembler & Multi-Agent Production Pipeline
+            </span>
+          </div>
         </div>
-    );
+
+        {/* Right side status badges & Settings */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{
+            fontSize: '0.72rem',
+            padding: '0.25rem 0.6rem',
+            borderRadius: '8px',
+            background: backendHealth.geminiKeySet ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+            color: backendHealth.geminiKeySet ? '#10b981' : '#eab308',
+            border: `1px solid ${backendHealth.geminiKeySet ? 'rgba(16, 185, 129, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            fontWeight: 600
+          }}>
+            Gemini: {backendHealth.geminiKeySet ? 'Ready' : 'Heuristic Mode'}
+          </span>
+
+          <span style={{
+            fontSize: '0.72rem',
+            padding: '0.25rem 0.6rem',
+            borderRadius: '8px',
+            background: backendHealth.deepgramKeySet ? 'rgba(16, 185, 129, 0.15)' : 'rgba(234, 179, 8, 0.15)',
+            color: backendHealth.deepgramKeySet ? '#10b981' : '#eab308',
+            border: `1px solid ${backendHealth.deepgramKeySet ? 'rgba(16, 185, 129, 0.3)' : 'rgba(234, 179, 8, 0.3)'}`,
+            fontWeight: 600
+          }}>
+            Deepgram: {backendHealth.deepgramKeySet ? 'Aura Active' : 'Cadence Timing'}
+          </span>
+
+          <button
+            onClick={() => setIsAutoPilotOpen(true)}
+            style={{
+              padding: '0.45rem 1rem',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+              color: '#ffffff',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontWeight: 700,
+              boxShadow: '0 2px 10px rgba(79, 70, 229, 0.4)'
+            }}
+          >
+            🚀 Auto-Pilot Producer
+          </button>
+
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            style={{
+              padding: '0.45rem 0.85rem',
+              borderRadius: '8px',
+              border: '1px solid #334155',
+              background: '#181822',
+              color: '#f8fafc',
+              fontSize: '0.8rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontWeight: 600
+            }}
+          >
+            ⚙️ Keys & Config
+          </button>
+        </div>
+      </header>
+
+      {/* Main Studio Work Area */}
+      <main style={{
+        maxWidth: '1400px',
+        margin: '0 auto',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.5rem'
+      }}>
+        {/* Top 2-Column Grid: Clip Library (Left) & Director Controls (Right) */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(480px, 1fr))',
+          gap: '1.5rem',
+          alignItems: 'stretch'
+        }}>
+          {/* Panel 1: Video Clip Ingest & Library */}
+          <ClipLibrary
+            clips={clips}
+            onUpload={handleUploadClips}
+            onDeleteClip={handleDeleteClip}
+            isUploading={isUploading}
+            onOpenRecordModal={() => setIsRecordModalOpen(true)}
+            onOpenStockModal={() => setIsStockModalOpen(true)}
+          />
+
+          {/* Panel 2: Director Studio (Prompt, Script Modes, Audio & Effects) */}
+          <DirectorStudio
+            userPrompt={userPrompt}
+            setUserPrompt={setUserPrompt}
+            scriptMode={scriptMode}
+            setScriptMode={setScriptMode}
+            rawScript={rawScript}
+            setRawScript={setRawScript}
+            voices={voices}
+            selectedVoice={selectedVoice}
+            setSelectedVoice={setSelectedVoice}
+            musicTracks={musicTracks}
+            selectedMusicId={selectedMusicId}
+            setSelectedMusicId={setSelectedMusicId}
+            enableLightingEffects={enableLightingEffects}
+            setEnableLightingEffects={setEnableLightingEffects}
+            enableScreenRecordingSpotlight={enableScreenRecordingSpotlight}
+            setEnableScreenRecordingSpotlight={setEnableScreenRecordingSpotlight}
+            onStartOrchestration={handleStartOrchestration}
+            isOrchestrating={isOrchestrating}
+            clipCount={clips.length}
+          />
+        </div>
+
+        {/* Panel 3: Master Timeline & Storyboard (EDL) */}
+        <TimelinePreview
+          edl={edl}
+          onRender={handleRenderVideo}
+          isRendering={isRendering}
+          renderProgress={renderProgress}
+          renderedVideoUrl={renderedVideoUrl}
+        />
+      </main>
+
+      {/* Real-Time Agent Dialogue Modal */}
+      <BoardroomModal
+        isOpen={isBoardroomOpen}
+        onClose={() => setIsBoardroomOpen(false)}
+        dialogue={dialogue}
+        status={orchestratorStatus}
+        isComplete={isOrchestrationComplete}
+        onViewTimeline={() => {
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }}
+      />
+
+      {/* Agent Browser Recording Modal */}
+      <RecordAppModal
+        isOpen={isRecordModalOpen}
+        onClose={() => setIsRecordModalOpen(false)}
+        onClipRecorded={handleAddNewClip}
+        apiBase={API_BASE}
+      />
+
+      {/* Stock Reaction B-Roll Modal */}
+      <StockBrollModal
+        isOpen={isStockModalOpen}
+        onClose={() => setIsStockModalOpen(false)}
+        onClipImported={handleAddNewClip}
+        apiBase={API_BASE}
+      />
+
+      {/* Auto-Pilot Full Video Producer Modal */}
+      <AutoPilotModal
+        isOpen={isAutoPilotOpen}
+        onClose={() => setIsAutoPilotOpen(false)}
+        apiBase={API_BASE}
+        voices={voices}
+        onAutoPilotComplete={handleAutoPilotComplete}
+      />
+
+      {/* API Key Settings Modal */}
+      <ApiKeyModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={(keys) => {
+          setBackendHealth({
+            geminiKeySet: !!keys.geminiKey,
+            deepgramKeySet: !!keys.deepgramKey,
+            pexelsKeySet: false
+          });
+        }}
+      />
+    </div>
+  );
 };
 
 export default AgentWorkflowPage;

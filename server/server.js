@@ -1,0 +1,584 @@
+import express from 'express';
+import cors from 'cors';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import dotenv from 'dotenv';
+
+import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbientMusic } from './ffmpegService.js';
+import { analyzeVideoClip } from './clipVisionService.js';
+import { DEEPGRAM_VOICES } from './deepgramService.js';
+import { VideoAgentOrchestrator } from './agentOrchestrator.js';
+import { recordAppWorkflow } from './browserRecorder.js';
+import { searchBrollClips, importBrollClip } from './pexelsService.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const rootDir = path.resolve(__dirname, '..');
+
+// Load environment variables from .env
+dotenv.config({ path: path.join(rootDir, '.env') });
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+
+// Storage directories
+const storageDir = path.join(__dirname, 'storage');
+const uploadsDir = path.join(storageDir, 'uploads');
+const thumbnailsDir = path.join(storageDir, 'thumbnails');
+const audioDir = path.join(storageDir, 'audio');
+const rendersDir = path.join(storageDir, 'renders');
+const musicDir = path.join(storageDir, 'music');
+
+[storageDir, uploadsDir, thumbnailsDir, audioDir, rendersDir, musicDir].forEach(dir => {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+});
+
+// Generate default sample ambient music if not already present
+const defaultSampleMusicPath = path.join(musicDir, 'chill_tech_ambient.mp3');
+if (!fs.existsSync(defaultSampleMusicPath)) {
+  console.log('[Server] Generating default ambient music track...');
+  generateSampleAmbientMusic(defaultSampleMusicPath, 60).catch(err => {
+    console.warn('[Server] Note: Sample music generation failed:', err.message);
+  });
+}
+
+// In-memory catalog of uploaded clips
+let clipDatabase = [];
+
+// Middlewares
+app.use(cors());
+app.use(express.json());
+
+// Serve static storage assets (uploads, thumbnails, renders, audio)
+app.use('/storage', express.static(storageDir));
+
+// Multer storage setup for video uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname) || '.mp4';
+    const cleanBase = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
+    cb(null, `${cleanBase}_${Date.now()}${ext}`);
+  }
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 1024 * 1024 * 1024 } // 1GB limit
+});
+
+// -------------------------------------------------------------
+// ROUTES
+// -------------------------------------------------------------
+
+// Health check
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    geminiKeySet: !!(process.env.GEMINI_API_KEY),
+    deepgramKeySet: !!(process.env.DEEPGRAM_API_KEY),
+    pexelsKeySet: !!(process.env.PEXELS_API_KEY),
+    clipsLoaded: clipDatabase.length
+  });
+});
+
+// List Deepgram Voices
+app.get('/api/voices', (req, res) => {
+  res.json({ voices: DEEPGRAM_VOICES });
+});
+
+// List Background Music Tracks
+app.get('/api/music', (req, res) => {
+  const files = fs.readdirSync(musicDir).filter(f => f.endsWith('.mp3') || f.endsWith('.wav'));
+  const tracks = files.map(filename => ({
+    id: filename,
+    name: filename.replace(/[-_]/g, ' ').replace(/\.[^/.]+$/, ''),
+    url: `/storage/music/${filename}`,
+    filePath: path.join(musicDir, filename)
+  }));
+  res.json({ tracks });
+});
+
+// Upload Video Clips
+app.post('/api/upload', (req, res, next) => {
+  console.log('[Upload] Incoming multipart upload request received...');
+  next();
+}, upload.array('videos', 25), async (req, res) => {
+  try {
+    const files = req.files || [];
+    console.log(`[Upload] Received ${files.length} video file(s)`);
+    if (files.length === 0) {
+      return res.status(400).json({ error: 'No video files provided' });
+    }
+
+    const processedClips = [];
+
+    for (const file of files) {
+      const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const thumbnailName = `${clipId}.jpg`;
+      const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+
+      // 1. Generate thumbnail
+      try {
+        await generateThumbnail(file.path, thumbnailPath, 1.0);
+      } catch (thumbErr) {
+        console.warn(`[Upload] Thumbnail generation warning:`, thumbErr.message);
+      }
+
+      // 2. Vision analysis (Gemini or smart heuristic)
+      const visionResult = await analyzeVideoClip({
+        filePath: file.path,
+        clipId,
+        originalFilename: file.originalname,
+        geminiApiKey: req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY,
+        workDir: storageDir
+      });
+
+      const clipEntry = {
+        clipId,
+        filename: file.filename,
+        originalName: file.originalname,
+        filePath: file.path,
+        videoUrl: `/storage/uploads/${file.filename}`,
+        thumbnailUrl: fs.existsSync(thumbnailPath) ? `/storage/thumbnails/${thumbnailName}` : null,
+        ...visionResult
+      };
+
+      clipDatabase.push(clipEntry);
+      processedClips.push(clipEntry);
+    }
+
+    res.json({ success: true, clips: processedClips });
+  } catch (err) {
+    console.error('[Upload Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get all uploaded clips
+app.get('/api/clips', (req, res) => {
+  res.json({ clips: clipDatabase });
+});
+
+// Delete a clip
+app.delete('/api/clips/:id', (req, res) => {
+  const { id } = req.params;
+  const clipIndex = clipDatabase.findIndex(c => c.clipId === id);
+  if (clipIndex !== -1) {
+    const clip = clipDatabase[clipIndex];
+    try { if (fs.existsSync(clip.filePath)) fs.unlinkSync(clip.filePath); } catch (_) {}
+    clipDatabase.splice(clipIndex, 1);
+  }
+  res.json({ success: true, remaining: clipDatabase.length });
+});
+
+// -------------------------------------------------------------
+// BROWSER RECORDING AGENT (Playwright Screen Capture)
+// -------------------------------------------------------------
+app.post('/api/record-app', async (req, res) => {
+  try {
+    const { url, actions, targetDuration } = req.body;
+    if (!url) return res.status(400).json({ error: 'Target URL is required to record' });
+
+    console.log(`[Record App] Starting Playwright recording of: ${url}`);
+    const recResult = await recordAppWorkflow({
+      url,
+      actions: actions || [],
+      targetDurationSeconds: targetDuration || 8,
+      outputDir: uploadsDir
+    });
+
+    const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const thumbnailName = `${clipId}.jpg`;
+    const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+
+    await generateThumbnail(recResult.filePath, thumbnailPath, 1.0);
+
+    let parsedHostname = 'App Screen';
+    try { parsedHostname = new URL(url).hostname; } catch (_) {}
+
+    const visionResult = await analyzeVideoClip({
+      filePath: recResult.filePath,
+      clipId,
+      originalFilename: `Screen Recording (${parsedHostname})`,
+      geminiApiKey: req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY,
+      workDir: storageDir
+    });
+
+    const clipEntry = {
+      clipId,
+      filename: recResult.filename,
+      originalName: `Screen Recording (${parsedHostname})`,
+      filePath: recResult.filePath,
+      videoUrl: `/storage/uploads/${recResult.filename}`,
+      thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
+      ...visionResult,
+      contentType: 'screen_recording'
+    };
+
+    clipDatabase.push(clipEntry);
+    res.json({ success: true, clip: clipEntry });
+  } catch (err) {
+    console.error('[Record App Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// -------------------------------------------------------------
+// STOCK B-ROLL (Pexels / Curated Reaction Footage)
+// -------------------------------------------------------------
+app.get('/api/broll/search', async (req, res) => {
+  try {
+    const query = req.query.q || 'reaction';
+    const apiKey = req.headers['x-pexels-key'] || process.env.PEXELS_API_KEY;
+    const results = await searchBrollClips({ query, apiKey });
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[B-Roll Search Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/broll/import', async (req, res) => {
+  try {
+    const { videoUrl, title } = req.body;
+    if (!videoUrl) return res.status(400).json({ error: 'videoUrl is required' });
+
+    const downloaded = await importBrollClip({ videoUrl, title, outputDir: uploadsDir });
+
+    const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const thumbnailName = `${clipId}.jpg`;
+    const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+
+    await generateThumbnail(downloaded.filePath, thumbnailPath, 1.0);
+
+    const visionResult = await analyzeVideoClip({
+      filePath: downloaded.filePath,
+      clipId,
+      originalFilename: title || 'Stock B-Roll Reaction',
+      geminiApiKey: req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY,
+      workDir: storageDir
+    });
+
+    const clipEntry = {
+      clipId,
+      filename: downloaded.filename,
+      originalName: title || 'Stock B-Roll',
+      filePath: downloaded.filePath,
+      videoUrl: `/storage/uploads/${downloaded.filename}`,
+      thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
+      ...visionResult,
+      contentType: 'live_action'
+    };
+
+    clipDatabase.push(clipEntry);
+    res.json({ success: true, clip: clipEntry });
+  } catch (err) {
+    console.error('[B-Roll Import Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Run Agent Orchestration Pipeline
+app.post('/api/orchestrate', async (req, res) => {
+  try {
+    const {
+      userPrompt,
+      scriptMode,
+      rawScript,
+      selectedVoice,
+      selectedMusicId,
+      enableLightingEffects,
+      enableScreenRecordingSpotlight,
+      geminiKey,
+      deepgramKey
+    } = req.body;
+
+    if (clipDatabase.length === 0) {
+      return res.status(400).json({ error: 'Please upload or record at least one video clip first.' });
+    }
+
+    const dialogueEvents = [];
+    const progressUpdates = [];
+
+    let musicTrackPath = null;
+    if (selectedMusicId && selectedMusicId !== 'none') {
+      const candidatePath = path.join(musicDir, selectedMusicId);
+      if (fs.existsSync(candidatePath)) musicTrackPath = candidatePath;
+    } else if (selectedMusicId !== 'none' && fs.existsSync(defaultSampleMusicPath)) {
+      musicTrackPath = defaultSampleMusicPath;
+    }
+
+    const orchestrator = new VideoAgentOrchestrator({
+      geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
+      deepgramApiKey: deepgramKey || process.env.DEEPGRAM_API_KEY,
+      audioOutputDir: audioDir,
+      onProgress: (p) => {
+        console.log(`[Pipeline Progress] ${p}`);
+        progressUpdates.push(p);
+      },
+      onDialogue: (d) => {
+        console.log(`[Agent ${d.agent}] (${d.type}): ${d.message}`);
+        dialogueEvents.push(d);
+      }
+    });
+
+    const edl = await orchestrator.runPipeline({
+      userPrompt,
+      scriptMode,
+      rawScript,
+      clips: clipDatabase,
+      selectedVoice: selectedVoice || 'aura-orion-en',
+      musicTrack: musicTrackPath,
+      enableLightingEffects: enableLightingEffects ?? true,
+      enableScreenRecordingSpotlight: enableScreenRecordingSpotlight ?? true
+    });
+
+    res.json({
+      success: true,
+      edl,
+      dialogue: dialogueEvents,
+      progress: progressUpdates
+    });
+  } catch (err) {
+    console.error('[Orchestration Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Autonomous End-to-End Producer: URL + Goal -> Screen Capture + Reaction B-Roll + Script + Aura Voice + EDL
+app.post('/api/autopilot', async (req, res) => {
+  try {
+    const {
+      url,
+      goalPrompt,
+      selectedVoice = 'aura-orion-en',
+      selectedMusicId = 'chill_tech_ambient.mp3',
+      geminiKey,
+      deepgramKey,
+      recordDuration = 8
+    } = req.body;
+
+    if (!goalPrompt) {
+      return res.status(400).json({ error: 'Video goal or prompt is required.' });
+    }
+
+    const dialogueEvents = [];
+    const progressUpdates = [];
+    const logDialogue = (agent, type, message) => {
+      dialogueEvents.push({ agent, type, message, timestamp: new Date().toISOString() });
+      console.log(`[AutoPilot ${agent}] ${message}`);
+    };
+    const logProgress = (msg) => {
+      progressUpdates.push(msg);
+      console.log(`[AutoPilot] ${msg}`);
+    };
+
+    logDialogue('Showrunner', 'insight', 'Autonomous Studio activated: Preparing full video production from URL and Goal.');
+
+    const newClipsAdded = [];
+
+    // 1. Autonomous Screen Recording (if URL provided)
+    if (url && url.startsWith('http')) {
+      logProgress(`Launching Playwright agent to record app workflow at ${url}...`);
+      logDialogue('BrowserAgent', 'action', `Recording 1080p screen interaction at ${url}...`);
+      try {
+        const recResult = await recordAppWorkflow({
+          url,
+          targetDurationSeconds: recordDuration,
+          outputDir: uploadsDir,
+          onProgress: (p) => logProgress(p)
+        });
+
+        const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        const thumbnailName = `${clipId}.jpg`;
+        const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+        await generateThumbnail(recResult.filePath, thumbnailPath, 1.0);
+
+        let parsedHost = 'App Showcase';
+        try { parsedHost = new URL(url).hostname; } catch (_) {}
+
+        const visionResult = await analyzeVideoClip({
+          filePath: recResult.filePath,
+          clipId,
+          originalFilename: `Screen Recording (${parsedHost})`,
+          geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
+          workDir: storageDir
+        });
+
+        const screenClip = {
+          clipId,
+          filename: recResult.filename,
+          originalName: `Screen Recording (${parsedHost})`,
+          filePath: recResult.filePath,
+          videoUrl: `/storage/uploads/${recResult.filename}`,
+          thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
+          ...visionResult,
+          contentType: 'screen_recording'
+        };
+
+        clipDatabase.push(screenClip);
+        newClipsAdded.push(screenClip);
+        logDialogue('BrowserAgent', 'agreement', `Recorded 1080p application showcase clip (${recResult.duration.toFixed(1)}s).`);
+      } catch (recErr) {
+        console.warn('[AutoPilot] Screen recording warning:', recErr.message);
+        logDialogue('BrowserAgent', 'insight', `Note: Live screen recording skipped: ${recErr.message}. Proceeding with existing clips.`);
+      }
+    }
+
+    // 2. Intelligent Stock B-Roll Acquisition
+    logDialogue('ScoutAgent', 'action', 'Analyzing goal prompt for emotional reaction footage...');
+    const goalLower = goalPrompt.toLowerCase();
+    
+    // Choose relevant B-Roll reactions based on narrative needs
+    const candidateKeywords = [];
+    if (goalLower.includes('fail') || goalLower.includes('lecture') || goalLower.includes('theory') || goalLower.includes('trust') || goalLower.includes('no one') || goalLower.includes('boring')) {
+      candidateKeywords.push('shaking head');
+    }
+    if (goalLower.includes('job') || goalLower.includes('interview') || goalLower.includes('employer') || goalLower.includes('career')) {
+      candidateKeywords.push('interview');
+    }
+    if (goalLower.includes('portfolio') || goalLower.includes('cert') || goalLower.includes('hire') || goalLower.includes('success')) {
+      candidateKeywords.push('hired');
+    }
+    if (candidateKeywords.length === 0) candidateKeywords.push('simulation');
+
+    for (const kw of candidateKeywords.slice(0, 2)) {
+      try {
+        const results = await searchBrollClips({ query: kw, apiKey: req.headers['x-pexels-key'] || process.env.PEXELS_API_KEY });
+        if (results && results.length > 0) {
+          const chosenBroll = results[0];
+          const imported = await importBrollClip({ videoUrl: chosenBroll.videoUrl, title: chosenBroll.title, outputDir: uploadsDir });
+          
+          const clipId = `clip_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          const thumbnailName = `${clipId}.jpg`;
+          const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+          await generateThumbnail(imported.filePath, thumbnailPath, 1.0);
+
+          const visionResult = await analyzeVideoClip({
+            filePath: imported.filePath,
+            clipId,
+            originalFilename: imported.title,
+            geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
+            workDir: storageDir
+          });
+
+          const brollClipEntry = {
+            clipId,
+            filename: imported.filename,
+            originalName: imported.title,
+            filePath: imported.filePath,
+            videoUrl: `/storage/uploads/${imported.filename}`,
+            thumbnailUrl: `/storage/thumbnails/${thumbnailName}`,
+            ...visionResult,
+            contentType: 'live_action'
+          };
+
+          clipDatabase.push(brollClipEntry);
+          newClipsAdded.push(brollClipEntry);
+          logDialogue('ScoutAgent', 'agreement', `Imported stock reaction clip: "${imported.title}".`);
+        }
+      } catch (brollErr) {
+        console.warn(`[AutoPilot] Stock B-Roll import warning for "${kw}":`, brollErr.message);
+      }
+    }
+
+    // 3. Multi-Agent Orchestration (Script, Voice, Direction)
+    let musicTrackPath = null;
+    if (selectedMusicId && selectedMusicId !== 'none') {
+      const candidatePath = path.join(musicDir, selectedMusicId);
+      if (fs.existsSync(candidatePath)) musicTrackPath = candidatePath;
+    } else if (fs.existsSync(defaultSampleMusicPath)) {
+      musicTrackPath = defaultSampleMusicPath;
+    }
+
+    const orchestrator = new VideoAgentOrchestrator({
+      geminiApiKey: geminiKey || process.env.GEMINI_API_KEY,
+      deepgramApiKey: deepgramKey || process.env.DEEPGRAM_API_KEY,
+      audioOutputDir: audioDir,
+      onProgress: (p) => {
+        logProgress(p);
+      },
+      onDialogue: (d) => {
+        dialogueEvents.push(d);
+      }
+    });
+
+    logDialogue('ScreenplayAgent', 'action', 'Crafting persuasive spoken beats and hooks...');
+
+    const edl = await orchestrator.runPipeline({
+      userPrompt: goalPrompt,
+      scriptMode: 'rewrite',
+      rawScript: goalPrompt,
+      clips: clipDatabase,
+      selectedVoice: selectedVoice,
+      musicTrack: musicTrackPath,
+      enableLightingEffects: true,
+      enableScreenRecordingSpotlight: true
+    });
+
+    logDialogue('Showrunner', 'agreement', `Production assembly complete! Created ${edl.clips.length}-scene storyboard with Aura voiceover.`);
+
+    res.json({
+      success: true,
+      newClips: newClipsAdded,
+      allClips: clipDatabase,
+      edl,
+      dialogue: dialogueEvents,
+      progress: progressUpdates
+    });
+  } catch (err) {
+    console.error('[AutoPilot Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Render final timeline using FFmpeg
+app.post('/api/render', async (req, res) => {
+  try {
+    const { edl } = req.body;
+    if (!edl || !edl.clips || edl.clips.length === 0) {
+      return res.status(400).json({ error: 'Invalid EDL provided for rendering.' });
+    }
+
+    const renderId = `render_${Date.now()}`;
+    const outputFilename = `${renderId}.mp4`;
+    const outputPath = path.join(rendersDir, outputFilename);
+
+    console.log(`[Render] Starting FFmpeg assembly for ${edl.clips.length} clips...`);
+
+    await renderTimeline({
+      clips: edl.clips,
+      voiceoverAudioPath: edl.voiceoverAudioPath,
+      musicAudioPath: edl.musicTrack,
+      musicVolume: 0.15,
+      outputPath,
+      onProgress: (p) => console.log(`[Render Progress] ${p}`)
+    });
+
+    const meta = await getVideoMetadata(outputPath);
+
+    res.json({
+      success: true,
+      renderId,
+      videoUrl: `/storage/renders/${outputFilename}`,
+      duration: meta.duration,
+      width: meta.width,
+      height: meta.height
+    });
+  } catch (err) {
+    console.error('[Render Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Start listening
+app.listen(PORT, () => {
+  console.log(`\n======================================================`);
+  console.log(`🚀 Video AI Studio Backend listening on http://localhost:${PORT}`);
+  console.log(`   Uploads:    ${uploadsDir}`);
+  console.log(`   Renders:    ${rendersDir}`);
+  console.log(`   Audio:      ${audioDir}`);
+  console.log(`======================================================\n`);
+});

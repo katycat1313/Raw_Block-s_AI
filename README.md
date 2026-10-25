@@ -1,69 +1,105 @@
-# Raw Blocks AI — B-Roll Footage Generator
+# Raw Blocks AI Studio — Semantic Video Assembler & Multi-Agent Production Suite
 
-**Raw Blocks AI** generates short, cinematic b-roll clips for product marketing videos. Instead of trying to build a complete edited video from scratch, it generates the raw material — the 2–5 second product flashes, close-ups, texture shots, and reveal moments that editors cut into larger pieces.
-
----
-
-## What is B-Roll?
-
-B-roll is the supplemental footage that cuts away from the main shot. In product videos it shows up as:
-
-- A 1-second flash of the product sitting on a surface
-- A close-up of a button being pressed or a lid being opened
-- A macro shot of the product's texture or finish
-- A hand reaching in to grab the product
-- A beauty shot of packaging catching light
-
-These clips are the raw inventory of a video editor. You don't watch them alone — you cut to them.
+An autonomous multi-agent video production studio that transforms raw video clips and screen recordings into polished, narrated, and scored videos.
 
 ---
 
-## Why B-Roll (Not Full AI-Generated Videos)?
+## 🌟 Key Capabilities
 
-Current AI video generation (Veo, Runway, Sora) is impressive but has a specific weakness: **it cannot reliably reproduce a specific product**. If you give it a reference image of your exact blender — matte black, specific logo placement, particular handle shape — it will approximate. It hallucinates details, changes colors, ignores branding constraints. Generating 6 clips that all look like the *same* product is essentially unsolvable at production quality today.
+1. **Intelligent Clip Understanding (Vision Scout)**:
+   - Analyzes uploaded video clips and screen recordings using Gemini Multimodal Vision.
+   - Automatically detects UI screens, buttons, actions, lighting profiles, and scene durations.
 
-B-roll sidesteps this problem:
+2. **3 Flexible Script & Narration Modes**:
+   - 🤖 **AI Writes Script from Prompt**: Describe what you want the video to accomplish; the Screenplay Agent drafts the narration matching the available visuals.
+   - ✍️ **Polish My Draft**: Provide rough bullet points or talking points; the Screenplay Agent refines them into punchy, spoken-word beats.
+   - 📜 **Direct User Script**: Type your exact narration; the agents time-align the sentences to your video clips.
 
-- Each clip is **standalone** — no cross-clip product consistency required
-- Focus is on **motion, light, and atmosphere** rather than exact product reproduction
-- 2–5 second duration = simpler prompt = more reliable output
-- Editors pick what works; nothing is wasted
+3. **Human-Sounding Voiceover (Deepgram Aura)**:
+   - 12 natural Deepgram Aura human voices (Orion, Asteria, Luna, Stella, Zeus, etc.).
+   - Exact speech duration measurement so video clips are cut to the millisecond.
 
----
+4. **Intelligent Video Sequencing & Timeline Assembly**:
+   - The **Director Agent** matches each line of narration to the most semantically relevant clip segment.
+   - Automatically calculates `in` and `out` cut points to fit voiceover length.
 
-## How It Works
+5. **Lighting & Post-Processing (Visual Stylist)**:
+   - 🎯 **Screen Recording Spotlight & Focus Zoom**: Dynamically spotlights active UI quadrants and applies subtle focus zooms for instructional clarity.
+   - 💡 **Auto-Balance Lighting & Exposure**: Normalizes exposure, contrast, and brightness across different camera clips.
 
-1. **Input**: Paste a product URL and a reference video URL
-2. **Agent Research**: The team analyzes the product — features, visual DNA, pain points, target audience
-3. **B-Roll Shot Planning**: The Director designs a library of short footage moments mapped to the product
-4. **Generation**: Each shot is sent to Runway for video generation (requires Runway API key)
-5. **Library**: Download individual clips and cut them into your edit
-
----
-
-## Agent Team
-
-| Agent | Role |
-|---|---|
-| Researcher | Extracts product visual DNA, features, and reference footage |
-| Strategist | Maps shots to buyer psychology and platform requirements |
-| Director | Designs the b-roll shot library — what moments to capture |
-| QA | Checks shot plans for brand alignment and visual accuracy |
-| Video Editor | Assembles final shot list and generates Imagen reference frames |
+6. **Automated Background Music Ducking & FFmpeg Master Render**:
+   - Includes royalty-free ambient background music tracks.
+   - Automatically ducks (lowers volume of) background music whenever the voiceover speaks via sidechain compression.
+   - Assembles and renders the final 1080p MP4 directly on your machine.
 
 ---
 
-## Setup
+## 👥 The Agent Team
 
-1. Clone the repo and run `npm install`
-2. Copy `.env.example` to `.env` and fill in your API keys
-3. Run `npm run dev`
-4. Paste a product URL and reference video, then hit **Start Agents**
-
-Required API keys:
-- `VITE_GEMINI_API_KEY` — for the agent research pipeline
-- `VITE_RUNWAY_API_URL` + `VITE_RUNWAY_API_KEY` — for video generation (optional; prompts work without it)
+| Agent | Role | Responsibility |
+| :--- | :--- | :--- |
+| 🕵️ **Scout Agent** | Asset Scout & Vision | Catalogs uploaded footage, detects screen recordings vs live action, indexes actions and lighting |
+| ✍️ **Screenplay Agent** | Head Writer | Drafts or polishes narration, divides script into visual beats, paces cadence |
+| 🎙️ **Sound Agent** | Audio Producer | Synthesizes Deepgram Aura voiceover, measures millisecond duration, mixes background music |
+| 🎬 **Director Agent** | Lead Editor | Matches voiceover beats to clips, calculates in/out cut points, builds master EDL |
+| ✨ **Stylist Agent** | Visual FX Lead | Balances lighting/exposure, applies screen recording spotlights, focus zooms, and transitions |
 
 ---
 
-*Build a footage library, not a finished video.*
+## 🚀 Quickstart
+
+### 1. Install Dependencies
+Dependencies are already installed, but if setting up on a new machine:
+```bash
+npm install
+```
+
+### 2. Start the Studio
+Run one single command to launch both the backend video rendering engine and frontend interface:
+```bash
+npm run dev
+```
+
+* **Frontend UI**: [http://localhost:3000](http://localhost:3000)
+* **Backend API & FFmpeg Engine**: [http://localhost:3001](http://localhost:3001)
+
+### 3. API Keys (Optional)
+The system has **built-in intelligent fallbacks** so you can run, direct, and render videos immediately even without API keys!
+
+To enable cloud AI features:
+* **Google Gemini API Key**: For multimodal video vision and dynamic script generation.
+* **Deepgram API Key**: For lifelike human voiceover synthesis.
+
+You can configure them in `.env`:
+```env
+GEMINI_API_KEY=your_gemini_key_here
+DEEPGRAM_API_KEY=your_deepgram_key_here
+```
+Or click the **⚙️ Keys & Config** button directly in the web UI at any time.
+
+---
+
+## 📁 Project Architecture
+
+```
+Raw_Block-s_AI/
+├── server/
+│   ├── server.js              # Express API server (uploads, orchestrator, render)
+│   ├── agentOrchestrator.js    # Multi-agent coordination (Scout, Screenplay, Sound, Director, Stylist)
+│   ├── ffmpegService.js        # Video trimming, scaling, spotlight/lighting FX, music ducking
+│   ├── clipVisionService.js    # Multimodal video analysis with Gemini
+│   └── deepgramService.js      # Deepgram Aura TTS integration & duration measurement
+├── components/
+│   ├── AgentWorkflowPage.tsx   # Master studio layout & orchestration controller
+│   ├── ClipLibrary.tsx         # Drag-and-drop video uploader & indexed clip cards
+│   ├── DirectorStudio.tsx      # Prompt input, 3 script modes, voice & lighting controls
+│   ├── TimelinePreview.tsx     # Master storyboard EDL & final MP4 video player
+│   ├── BoardroomModal.tsx      # Real-time agent thought & debate visualizer
+│   └── ApiKeyModal.tsx         # In-browser API key manager
+└── storage/
+    ├── uploads/                # User uploaded video clips
+    ├── thumbnails/             # Video thumbnail previews
+    ├── audio/                  # Generated voiceovers
+    ├── music/                  # Background music tracks
+    └── renders/                # Final assembled MP4 videos
+```

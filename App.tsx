@@ -4,9 +4,9 @@ import './index.css';
 
 const App: React.FC = () => {
   return (
-    <main className="container">
+    <div style={{ minHeight: '100vh', backgroundColor: '#0a0a0f' }}>
       <AgentWorkflowPage />
-    </main>
+    </div>
   );
 };
 

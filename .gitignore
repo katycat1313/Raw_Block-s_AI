@@ -25,3 +25,11 @@ yarn-error.log*
 
 # secrets
 credentials/
+
+# build and storage
+/dist
+/server/storage/uploads/*
+/server/storage/thumbnails/*
+/server/storage/audio/*
+/server/storage/renders/*
+/server/test_fixtures
