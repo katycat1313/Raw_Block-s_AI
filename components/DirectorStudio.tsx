@@ -60,6 +60,21 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
   isOrchestrating,
   clipCount
 }) => {
+  const activePromptText = scriptMode === 'prompt_generate' ? userPrompt : (rawScript || userPrompt);
+  const partMatch = activePromptText.match(/(?:\[|\b)(?:part|p)\s*([0-9]+)(?:\s*(?:\.|\:)\s*(?:video|v)\s*([0-9]+))?(?:\]|\:|\.|\s|$)/i);
+
+  const handleInsertTag = (tag: string) => {
+    if (scriptMode === 'prompt_generate') {
+      const cleaned = userPrompt.replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]*/i, '').trim();
+      setUserPrompt(`${tag} ${cleaned}`);
+    } else {
+      const current = rawScript || userPrompt;
+      const cleaned = current.replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]*/i, '').trim();
+      setRawScript(`${tag} ${cleaned}`);
+      setUserPrompt(`${tag} ${cleaned}`);
+    }
+  };
+
   return (
     <div style={{
       background: '#121217',
@@ -155,6 +170,64 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
           >
             📜 Direct User Script
           </button>
+        </div>
+      </div>
+
+      {/* Series / Chapter Continuity Tag Bar */}
+      <div style={{
+        background: '#090a0f',
+        borderRadius: '10px',
+        padding: '0.65rem 0.85rem',
+        border: '1px solid #1e293b',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.4rem'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem' }}>
+          <span style={{ fontSize: '0.74rem', fontWeight: 600, color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+            <span>🎬</span> Series & Episode Continuity:
+          </span>
+          {partMatch && (
+            <span style={{
+              fontSize: '0.72rem',
+              fontWeight: 700,
+              background: 'rgba(236, 72, 153, 0.2)',
+              color: '#f472b6',
+              border: '1px solid rgba(236, 72, 153, 0.4)',
+              padding: '2px 8px',
+              borderRadius: '6px'
+            }}>
+              ✨ Part {partMatch[1]}{partMatch[2] ? ` (Video ${partMatch[2]})` : ''} Continuity Locked
+            </span>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {['[Part 1]', '[Part 2]', '[Part 3]', 'p1.v1', 'p2.v1', 'p3.v1'].map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => handleInsertTag(tag)}
+              style={{
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                padding: '3px 8px',
+                borderRadius: '6px',
+                background: 'rgba(99, 102, 241, 0.12)',
+                color: '#a5b4fc',
+                border: '1px solid rgba(99, 102, 241, 0.25)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)')}
+            >
+              + {tag}
+            </button>
+          ))}
+          <span style={{ fontSize: '0.68rem', color: '#64748b', alignSelf: 'center', marginLeft: '0.2rem' }}>
+            Agents match voice persona, 1.25x tempo & ducked audio across episodes
+          </span>
         </div>
       </div>
 

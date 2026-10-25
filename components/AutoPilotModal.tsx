@@ -32,6 +32,13 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
   const [currentStep, setCurrentStep] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
 
+  const partMatch = goalPrompt.match(/(?:\[|\b)(?:part|p)\s*([0-9]+)(?:\s*(?:\.|\:)\s*(?:video|v)\s*([0-9]+))?(?:\]|\:|\.|\s|$)/i);
+
+  const handleInsertTag = (tag: string) => {
+    const cleaned = goalPrompt.replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]*/i, '').trim();
+    setGoalPrompt(`${tag} ${cleaned}`);
+  };
+
   if (!isOpen) return null;
 
   const handleLaunch = async () => {
@@ -217,9 +224,49 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
 
             {/* Video Goal / Prompt */}
             <div style={{ marginBottom: '1.2rem' }}>
-              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem', color: '#e2e8f0' }}>
-                2. Film Goal, Pitch & Key Angles
-              </label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0' }}>
+                  2. Film Goal, Pitch & Key Angles
+                </label>
+                {partMatch && (
+                  <span style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    background: 'rgba(236, 72, 153, 0.2)',
+                    color: '#f472b6',
+                    border: '1px solid rgba(236, 72, 153, 0.4)',
+                    padding: '2px 8px',
+                    borderRadius: '6px'
+                  }}>
+                    🎬 Part {partMatch[1]}{partMatch[2] ? ` (Video ${partMatch[2]})` : ''} Series Continuity Active
+                  </span>
+                )}
+              </div>
+
+              {/* Quick Series Continuity Pills */}
+              <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.45rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <span style={{ fontSize: '0.72rem', color: '#94a3b8' }}>Series tags:</span>
+                {['[Part 1]', '[Part 2]', '[Part 3]', 'p1.v1', 'p2.v1'].map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => handleInsertTag(tag)}
+                    style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      padding: '2px 7px',
+                      borderRadius: '5px',
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#a5b4fc',
+                      border: '1px solid rgba(99, 102, 241, 0.3)',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+
               <textarea
                 value={goalPrompt}
                 onChange={(e) => setGoalPrompt(e.target.value)}

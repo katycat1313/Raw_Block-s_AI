@@ -32,4 +32,5 @@ credentials/
 /server/storage/thumbnails/*
 /server/storage/audio/*
 /server/storage/renders/*
+/server/storage/clips.json
 /server/test_fixtures

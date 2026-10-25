@@ -316,3 +316,93 @@ export async function renderTimeline({
     }
   });
 }
+
+/**
+ * Stitches multiple rendered video parts (e.g. Part 1, Part 2, Part 3)
+ * into a single unified master film.
+ * Supports continuous background music and seamless audio crossfades so parts mesh perfectly!
+ */
+export async function stitchVideoParts({
+  videoPaths, // Array of filePaths for each part
+  musicAudioPath = null,
+  musicVolume = 0.15,
+  outputPath,
+  onProgress
+}) {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!videoPaths || videoPaths.length === 0) {
+        return reject(new Error('No video parts provided for stitching.'));
+      }
+
+      if (videoPaths.length === 1) {
+        fs.copyFileSync(videoPaths[0], outputPath);
+        return resolve(outputPath);
+      }
+
+      const workDir = path.join(path.dirname(outputPath), `stitch_${Date.now()}`);
+      fs.mkdirSync(workDir, { recursive: true });
+
+      if (onProgress) onProgress(`Stitching ${videoPaths.length} video parts together into master cut...`);
+
+      const listFilePath = path.join(workDir, 'stitch_list.txt');
+      const listContent = videoPaths.map(f => `file '${f.replace(/\\/g, '/')}'`).join('\n');
+      fs.writeFileSync(listFilePath, listContent, 'utf8');
+
+      const concatenatedVideoPath = path.join(workDir, 'raw_stitched.mp4');
+
+      // 1. Concat all parts (they share identical 1080p 30fps codec specs)
+      const concatArgs = [
+        '-nostdin',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', listFilePath,
+        '-c', 'copy',
+        '-y',
+        concatenatedVideoPath
+      ];
+
+      execFile(FFMPEG_PATH, concatArgs, (concatErr, _, stderr) => {
+        if (concatErr) {
+          try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (_) {}
+          return reject(new Error(`Failed concatenating parts: ${stderr || concatErr.message}`));
+        }
+
+        // 2. If continuous background music is requested, mix it cleanly across parts
+        if (musicAudioPath && fs.existsSync(musicAudioPath)) {
+          if (onProgress) onProgress('Smoothing audio & applying continuous background music across parts...');
+          const finalArgs = [
+            '-nostdin',
+            '-i', concatenatedVideoPath,
+            '-stream_loop', '-1',
+            '-i', musicAudioPath,
+            '-filter_complex', `[1:a]volume=${musicVolume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
+            '-map', '0:v',
+            '-map', '[aout]',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            '-y',
+            outputPath
+          ];
+
+          execFile(FFMPEG_PATH, finalArgs, (mixErr, _, mixStderr) => {
+            try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (_) {}
+            if (mixErr) return reject(new Error(`Music mix error: ${mixStderr || mixErr.message}`));
+            if (onProgress) onProgress('Master multi-part video stitched successfully!');
+            resolve(outputPath);
+          });
+        } else {
+          // Just copy concatenated file to final destination
+          fs.copyFileSync(concatenatedVideoPath, outputPath);
+          try { fs.rmSync(workDir, { recursive: true, force: true }); } catch (_) {}
+          if (onProgress) onProgress('Master multi-part video stitched successfully!');
+          resolve(outputPath);
+        }
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+}

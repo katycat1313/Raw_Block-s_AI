@@ -72,6 +72,24 @@ export class VideoAgentOrchestrator {
       effectiveDraft = userPrompt.trim();
     }
 
+    // Detect Series / Part tags like [Part 1], Part 1:, p1.v1, p2.v1, [Part 2]
+    const partTagRegex = /(?:\[|\b)(?:part|p)\s*([0-9]+)(?:\s*(?:\.|\:)\s*(?:video|v)\s*([0-9]+))?(?:\]|\:|\.|\s|$)/i;
+    const partMatch = effectiveDraft.match(partTagRegex);
+    let partInfo = null;
+    if (partMatch) {
+      const partNum = parseInt(partMatch[1], 10);
+      const videoNum = partMatch[2] ? parseInt(partMatch[2], 10) : 1;
+      partInfo = {
+        label: `Part ${partNum}${partMatch[2] ? ` (Video ${videoNum})` : ''}`,
+        partNumber: partNum,
+        videoNumber: videoNum
+      };
+      this.log('Showrunner', 'Series Continuity', 
+        `🎬 Series Tag Detected: "${partInfo.label}". Matching voiceover (${selectedVoice}), music ducking, and visual tempo so this episode meshes perfectly with adjacent parts.`, 
+        'finding'
+      );
+    }
+
     this.log('Screenplay', 'Head Writer', 
       `Script Mode: "${scriptMode}". Input text length: ${effectiveDraft.length} chars.`, 
       'thought'
@@ -223,6 +241,7 @@ export class VideoAgentOrchestrator {
     // -------------------------------------------------------------
     const finalEDL = {
       projectTitle: userPrompt || 'Automated Video Project',
+      partInfo: partInfo || null,
       totalDuration: voiceoverResult.duration,
       voiceoverAudioPath: voiceoverResult.audioPath,
       voiceoverDuration: voiceoverResult.duration,
@@ -445,10 +464,11 @@ export class VideoAgentOrchestrator {
       return this.generateFallbackBeats('Krechet Academy', clips);
     }
 
-    // 1. Strip meta prompts like "create a short awareness video about"
+    // 1. Strip meta prompts and chapter/part tags like "[Part 1]", "p1.v1:", etc.
     let clean = draftText
       .replace(/^(create|make|generate|produce)\s+(a\s+)?(short\s+)?(awareness\s+)?video\s+(about|for)\s*:?/i, '')
       .replace(/^(this\s+video\s+is\s+about)\s*:?/i, '')
+      .replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]+/i, '')
       .replace(/^"(.*?)"$/s, '$1') // unquote outer quotes if wrapped
       .trim();
 

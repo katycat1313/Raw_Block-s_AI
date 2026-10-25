@@ -6,7 +6,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
-import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbientMusic } from './ffmpegService.js';
+import { getVideoMetadata, generateThumbnail, renderTimeline, generateSampleAmbientMusic, stitchVideoParts } from './ffmpegService.js';
 import { analyzeVideoClip } from './clipVisionService.js';
 import { DEEPGRAM_VOICES } from './deepgramService.js';
 import { VideoAgentOrchestrator } from './agentOrchestrator.js';
@@ -44,8 +44,62 @@ if (!fs.existsSync(defaultSampleMusicPath)) {
   });
 }
 
-// In-memory catalog of uploaded clips
+// Catalog of uploaded clips with disk persistence
+const clipsDbPath = path.join(storageDir, 'clips.json');
 let clipDatabase = [];
+
+function saveClipDatabase() {
+  try {
+    fs.writeFileSync(clipsDbPath, JSON.stringify(clipDatabase, null, 2), 'utf8');
+  } catch (e) {
+    console.error('[DB] Failed saving clips.json:', e);
+  }
+}
+
+// Load persisted database on startup
+if (fs.existsSync(clipsDbPath)) {
+  try {
+    const raw = fs.readFileSync(clipsDbPath, 'utf8');
+    clipDatabase = JSON.parse(raw).filter(c => fs.existsSync(c.filePath));
+    console.log(`[DB] Restored ${clipDatabase.length} clips from clips.json`);
+  } catch (e) {
+    console.warn('[DB] Could not load clips.json:', e.message);
+  }
+}
+
+// If database is empty, auto-index existing files in uploadsDir
+if (clipDatabase.length === 0) {
+  try {
+    const existingFiles = fs.readdirSync(uploadsDir).filter(f => f.endsWith('.mp4'));
+    for (const f of existingFiles) {
+      const filePath = path.join(uploadsDir, f);
+      const clipId = `clip_${path.basename(f, '.mp4')}`;
+      const thumbnailName = `${clipId}.jpg`;
+      const thumbnailPath = path.join(thumbnailsDir, thumbnailName);
+      
+      clipDatabase.push({
+        clipId,
+        filename: f,
+        originalName: f,
+        filePath,
+        videoUrl: `/storage/uploads/${f}`,
+        thumbnailUrl: fs.existsSync(thumbnailPath) ? `/storage/thumbnails/${thumbnailName}` : null,
+        title: f.replace(/_\d+\.mp4$/, '').replace(/[_-]/g, ' '),
+        description: 'Uploaded studio video block',
+        tags: ['studio', 'b-roll', 'workflow', 'action'],
+        duration: 4.0,
+        width: 1920,
+        height: 1080
+      });
+    }
+    if (clipDatabase.length > 0) {
+      console.log(`[DB] Auto-indexed ${clipDatabase.length} existing clips from uploads folder`);
+      saveClipDatabase();
+    }
+  } catch (scanErr) {
+    console.warn('[DB] Scan error:', scanErr.message);
+  }
+}
 
 // Middlewares
 app.use(cors());
@@ -146,6 +200,7 @@ app.post('/api/upload', (req, res, next) => {
       };
 
       clipDatabase.push(clipEntry);
+      saveClipDatabase();
       processedClips.push(clipEntry);
     }
 
@@ -169,6 +224,7 @@ app.delete('/api/clips/:id', (req, res) => {
     const clip = clipDatabase[clipIndex];
     try { if (fs.existsSync(clip.filePath)) fs.unlinkSync(clip.filePath); } catch (_) {}
     clipDatabase.splice(clipIndex, 1);
+    saveClipDatabase();
   }
   res.json({ success: true, remaining: clipDatabase.length });
 });
@@ -219,6 +275,7 @@ app.post('/api/record-app', async (req, res) => {
     };
 
     clipDatabase.push(clipEntry);
+    saveClipDatabase();
     res.json({ success: true, clip: clipEntry });
   } catch (err) {
     console.error('[Record App Error]', err);
@@ -274,6 +331,7 @@ app.post('/api/broll/import', async (req, res) => {
     };
 
     clipDatabase.push(clipEntry);
+    saveClipDatabase();
     res.json({ success: true, clip: clipEntry });
   } catch (err) {
     console.error('[B-Roll Import Error]', err);
@@ -428,6 +486,7 @@ app.post('/api/autopilot', async (req, res) => {
           };
 
           clipDatabase.push(screenClip);
+          saveClipDatabase();
           newClipsAdded.push(screenClip);
           logDialogue('BrowserAgent', 'agreement', `Recorded micro-clip: "${rec.title}" (${rec.duration.toFixed(1)}s).`);
         }
@@ -486,6 +545,7 @@ app.post('/api/autopilot', async (req, res) => {
           };
 
           clipDatabase.push(brollClipEntry);
+          saveClipDatabase();
           newClipsAdded.push(brollClipEntry);
           logDialogue('ScoutAgent', 'agreement', `Imported stock reaction clip: "${imported.title}".`);
         }
@@ -581,6 +641,57 @@ app.post('/api/render', async (req, res) => {
     });
   } catch (err) {
     console.error('[Render Error]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Stitch multiple rendered parts (e.g. Part 1, Part 2, Part 3) into a single unified master film
+app.post('/api/stitch-parts', async (req, res) => {
+  try {
+    const { partUrls, selectedMusicId } = req.body;
+    if (!partUrls || !Array.isArray(partUrls) || partUrls.length === 0) {
+      return res.status(400).json({ error: 'Please provide at least one part URL to stitch.' });
+    }
+
+    // Resolve local filepaths from URLs
+    const videoPaths = partUrls.map(u => {
+      const filename = path.basename(u);
+      return path.join(rendersDir, filename);
+    }).filter(p => fs.existsSync(p));
+
+    if (videoPaths.length === 0) {
+      return res.status(400).json({ error: 'Could not find the rendered part files on disk.' });
+    }
+
+    const masterFilename = `master_stitched_${Date.now()}.mp4`;
+    const masterPath = path.join(rendersDir, masterFilename);
+
+    let musicPath = null;
+    if (selectedMusicId && selectedMusicId !== 'none') {
+      const candidate = path.join(musicDir, selectedMusicId);
+      if (fs.existsSync(candidate)) musicPath = candidate;
+    }
+
+    console.log(`[Stitcher] Stitching ${videoPaths.length} parts into ${masterFilename}...`);
+    await stitchVideoParts({
+      videoPaths,
+      musicAudioPath: musicPath,
+      outputPath: masterPath,
+      onProgress: (p) => console.log(`[Stitch Progress] ${p}`)
+    });
+
+    const meta = await getVideoMetadata(masterPath);
+
+    res.json({
+      success: true,
+      videoUrl: `/storage/renders/${masterFilename}`,
+      duration: meta.duration,
+      width: meta.width,
+      height: meta.height,
+      partsCount: videoPaths.length
+    });
+  } catch (err) {
+    console.error('[Stitch Error]', err);
     res.status(500).json({ error: err.message });
   }
 });

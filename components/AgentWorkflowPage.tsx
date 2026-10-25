@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClipLibrary, VideoClip } from './ClipLibrary';
 import { DirectorStudio, DeepgramVoice, MusicTrack } from './DirectorStudio';
-import { TimelinePreview, EDL } from './TimelinePreview';
+import { TimelinePreview, EDL, SeriesPart } from './TimelinePreview';
 import { BoardroomModal, DialogueEvent } from './BoardroomModal';
 import { ApiKeyModal } from './ApiKeyModal';
 import { RecordAppModal } from './RecordAppModal';
@@ -57,6 +57,73 @@ export const AgentWorkflowPage: React.FC = () => {
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState('');
   const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
+
+  // Episodic / Multi-Part Series State
+  const [seriesParts, setSeriesParts] = useState<SeriesPart[]>(() => {
+    try {
+      const saved = localStorage.getItem('RAW_BLOCKS_SERIES_PARTS');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [isStitching, setIsStitching] = useState(false);
+  const [stitchedVideoUrl, setStitchedVideoUrl] = useState<string | null>(null);
+
+  // Persist Series Parts
+  useEffect(() => {
+    try {
+      localStorage.setItem('RAW_BLOCKS_SERIES_PARTS', JSON.stringify(seriesParts));
+    } catch (e) {
+      console.warn('Failed saving series parts to localStorage:', e);
+    }
+  }, [seriesParts]);
+
+  const handleAddSeriesPart = (newPart: Omit<SeriesPart, 'id'>) => {
+    const id = `part_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+    setSeriesParts((prev) => [...prev, { ...newPart, id }]);
+  };
+
+  const handleRemoveSeriesPart = (id: string) => {
+    setSeriesParts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleStitchParts = async (partUrls: string[], musicId?: string) => {
+    if (!partUrls || partUrls.length < 2) {
+      alert('Please save at least 2 video parts to stitch into a master video.');
+      return;
+    }
+    setIsStitching(true);
+    setStitchedVideoUrl(null);
+    try {
+      const res = await fetch(`${API_BASE}/api/stitch-parts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partUrls,
+          selectedMusicId: musicId && musicId !== 'preserve' ? musicId : 'none'
+        })
+      });
+
+      const responseText = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(responseText);
+      } catch (_) {
+        throw new Error(`Server returned error (${res.status}): ${responseText.substring(0, 120)}`);
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to stitch video parts.');
+      }
+
+      setStitchedVideoUrl(normalizeUrl(data.videoUrl));
+    } catch (err: any) {
+      alert(`Stitching Error: ${err.message}`);
+    } finally {
+      setIsStitching(false);
+    }
+  };
 
   // Settings Modal & API Status
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -473,6 +540,14 @@ export const AgentWorkflowPage: React.FC = () => {
           isRendering={isRendering}
           renderProgress={renderProgress}
           renderedVideoUrl={renderedVideoUrl}
+          seriesParts={seriesParts}
+          onAddSeriesPart={handleAddSeriesPart}
+          onRemoveSeriesPart={handleRemoveSeriesPart}
+          onStitchParts={handleStitchParts}
+          isStitching={isStitching}
+          stitchedVideoUrl={stitchedVideoUrl}
+          selectedMusicId={selectedMusicId}
+          musicTracks={musicTracks}
         />
       </main>
 
