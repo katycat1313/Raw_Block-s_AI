@@ -1,4 +1,5 @@
 import React from 'react';
+import { CHAPTER_PRESETS, ChapterPreset } from '../constants/chapterPresets';
 
 export interface DeepgramVoice {
   id: string;
@@ -35,6 +36,7 @@ interface DirectorStudioProps {
   onStartOrchestration: () => void;
   isOrchestrating: boolean;
   clipCount: number;
+  seriesPartsCount?: number;
 }
 
 export const DirectorStudio: React.FC<DirectorStudioProps> = ({
@@ -58,7 +60,8 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
   setEnableScreenRecordingSpeed,
   onStartOrchestration,
   isOrchestrating,
-  clipCount
+  clipCount,
+  seriesPartsCount = 0
 }) => {
   const activePromptText = scriptMode === 'prompt_generate' ? userPrompt : (rawScript || userPrompt);
   const partMatch = activePromptText.match(/(?:\[|\b)(?:part|p)\s*([0-9]+)(?:\s*(?:\.|\:)\s*(?:video|v)\s*([0-9]+))?(?:\]|\:|\.|\s|$)/i);
@@ -75,8 +78,14 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
     }
   };
 
+  const handleLoadPreset = (preset: typeof CHAPTER_PRESETS[0]) => {
+    setRawScript(preset.script);
+    setUserPrompt(preset.script);
+    setScriptMode('user_direct');
+  };
+
   return (
-    <div style={{
+    <div id="director-studio-panel" style={{
       background: '#121217',
       border: '1px solid #23232f',
       borderRadius: '16px',
@@ -97,6 +106,49 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
           </span>
         </div>
       </div>
+
+      {/* Series Vault Status Notification Banner */}
+      {seriesPartsCount > 0 && (
+        <div style={{
+          background: 'rgba(16, 185, 129, 0.1)',
+          border: '1px solid rgba(16, 185, 129, 0.3)',
+          borderRadius: '10px',
+          padding: '0.65rem 0.95rem',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '0.5rem',
+          fontSize: '0.82rem',
+          color: '#34d399'
+        }}>
+          <div>
+            <span>🎬 <strong>Series Vault Progress:</strong> {seriesPartsCount} {seriesPartsCount === 1 ? 'part' : 'parts'} safely saved. Ready to direct <strong>Part {seriesPartsCount + 1}</strong>!</span>
+          </div>
+          {seriesPartsCount < CHAPTER_PRESETS.length && (
+            <button
+              type="button"
+              onClick={() => handleLoadPreset(CHAPTER_PRESETS[seriesPartsCount])}
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '4px 10px',
+                borderRadius: '6px',
+                background: '#10b981',
+                color: '#ffffff',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+              }}
+            >
+              <span>⚡ Load {CHAPTER_PRESETS[seriesPartsCount].title}</span> ➔
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Script Mode Selector Tabs */}
       <div>
@@ -203,31 +255,80 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
         </div>
 
         <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {['[Part 1]', '[Part 2]', '[Part 3]', 'p1.v1', 'p2.v1', 'p3.v1'].map((tag) => (
-            <button
-              key={tag}
-              type="button"
-              onClick={() => handleInsertTag(tag)}
-              style={{
-                fontSize: '0.72rem',
-                fontWeight: 600,
-                padding: '3px 8px',
-                borderRadius: '6px',
-                background: 'rgba(99, 102, 241, 0.12)',
-                color: '#a5b4fc',
-                border: '1px solid rgba(99, 102, 241, 0.25)',
-                cursor: 'pointer',
-                transition: 'all 0.15s ease'
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)')}
-            >
-              + {tag}
-            </button>
-          ))}
+          {['[Part 1]', '[Part 2]', '[Part 3]', '[Part 4]', 'p1.v1', 'p2.v1', 'p3.v1'].map((tag) => {
+            const isMatch = partMatch && (
+              (tag === `[Part ${partMatch[1]}]`) ||
+              (tag === `p${partMatch[1]}.v${partMatch[2] || 1}`)
+            );
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => handleInsertTag(tag)}
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: isMatch ? 700 : 600,
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  background: isMatch ? 'rgba(236, 72, 153, 0.25)' : 'rgba(99, 102, 241, 0.12)',
+                  color: isMatch ? '#f472b6' : '#a5b4fc',
+                  border: isMatch ? '1px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(99, 102, 241, 0.25)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+                onMouseEnter={(e) => {
+                  if (!isMatch) e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)';
+                }}
+                onMouseLeave={(e) => {
+                  if (!isMatch) e.currentTarget.style.background = 'rgba(99, 102, 241, 0.12)';
+                }}
+              >
+                {isMatch ? '✓ ' : '+ '}{tag}
+              </button>
+            );
+          })}
           <span style={{ fontSize: '0.68rem', color: '#64748b', alignSelf: 'center', marginLeft: '0.2rem' }}>
             Agents match voice persona, 1.25x tempo & ducked audio across episodes
           </span>
+        </div>
+
+        {/* 1-Click Course Storyline Presets */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.4rem',
+          flexWrap: 'wrap',
+          marginTop: '0.2rem',
+          paddingTop: '0.4rem',
+          borderTop: '1px solid rgba(255, 255, 255, 0.05)'
+        }}>
+          <span style={{ fontSize: '0.72rem', color: '#94a3b8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <span>📋</span> Course Script Presets:
+          </span>
+          {CHAPTER_PRESETS.map((cp) => {
+            const isSelected = partMatch && Number(partMatch[1]) === cp.part;
+            return (
+              <button
+                key={cp.part}
+                type="button"
+                onClick={() => handleLoadPreset(cp)}
+                title={cp.summary}
+                style={{
+                  fontSize: '0.72rem',
+                  fontWeight: isSelected ? 700 : 500,
+                  padding: '3px 8px',
+                  borderRadius: '6px',
+                  background: isSelected ? 'rgba(236, 72, 153, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                  color: isSelected ? '#f472b6' : '#cbd5e1',
+                  border: isSelected ? '1px solid rgba(236, 72, 153, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                {isSelected ? '✓ ' : ''}{cp.title}
+              </button>
+            );
+          })}
         </div>
       </div>
 

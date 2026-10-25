@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ClipLibrary, VideoClip } from './ClipLibrary';
 import { DirectorStudio, DeepgramVoice, MusicTrack } from './DirectorStudio';
+import { CHAPTER_PRESETS } from '../constants/chapterPresets';
 import { TimelinePreview, EDL, SeriesPart } from './TimelinePreview';
 import { BoardroomModal, DialogueEvent } from './BoardroomModal';
 import { ApiKeyModal } from './ApiKeyModal';
@@ -89,6 +90,41 @@ export const AgentWorkflowPage: React.FC = () => {
 
   const handleRemoveSeriesPart = (id: string) => {
     setSeriesParts((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  const handleGoToNextPart = (targetPartNumber?: number) => {
+    const nextNum = targetPartNumber || (seriesParts.length + 1);
+    const nextTag = `[Part ${nextNum}]`;
+
+    // Clear previous rendered video URL so the user starts fresh on the next part
+    setRenderedVideoUrl(null);
+
+    // If chapter preset exists for this part, load it automatically
+    const preset = CHAPTER_PRESETS.find((cp) => cp.part === nextNum);
+    if (preset) {
+      setRawScript(preset.script);
+      setUserPrompt(preset.script);
+      setScriptMode('user_direct');
+    } else {
+      setUserPrompt((prev) => {
+        const cleaned = prev.replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]*/i, '').trim();
+        return cleaned ? `${nextTag} ${cleaned}` : `${nextTag} `;
+      });
+      setRawScript((prev) => {
+        const cleaned = prev.replace(/^\[?\b(?:part|p)\s*[0-9]+(?:\s*(?:\.|\:)\s*(?:video|v)\s*[0-9]+)?\]?[\:\.\-\s]*/i, '').trim();
+        return cleaned ? `${nextTag} ${cleaned}` : `${nextTag} `;
+      });
+    }
+
+    // Scroll smoothly up to Director Studio panel and focus input
+    const el = document.getElementById('director-studio-panel');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTimeout(() => {
+        const textarea = el.querySelector('textarea, input[type="text"]') as HTMLElement | null;
+        if (textarea) textarea.focus();
+      }, 350);
+    }
   };
 
   const handleStitchParts = async (partUrls: string[], musicId?: string) => {
@@ -266,6 +302,7 @@ export const AgentWorkflowPage: React.FC = () => {
     setIsBoardroomOpen(true);
     setIsOrchestrationComplete(false);
     setDialogue([]);
+    setRenderedVideoUrl(null);
     setOrchestratorStatus('Deploying multi-agent production team...');
 
     try {
@@ -536,6 +573,7 @@ export const AgentWorkflowPage: React.FC = () => {
             onStartOrchestration={handleStartOrchestration}
             isOrchestrating={isOrchestrating}
             clipCount={clips.length}
+            seriesPartsCount={seriesParts.length}
           />
         </div>
 
@@ -554,6 +592,7 @@ export const AgentWorkflowPage: React.FC = () => {
           stitchedVideoUrl={stitchedVideoUrl}
           selectedMusicId={selectedMusicId}
           musicTracks={musicTracks}
+          onGoToNextPart={handleGoToNextPart}
         />
       </main>
 

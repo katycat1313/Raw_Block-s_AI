@@ -70,6 +70,7 @@ interface TimelinePreviewProps {
   stitchedVideoUrl?: string | null;
   selectedMusicId?: string;
   musicTracks?: Array<{ id: string; name: string }>;
+  onGoToNextPart?: (targetPartNumber?: number) => void;
 }
 
 export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
@@ -85,7 +86,8 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
   isStitching = false,
   stitchedVideoUrl = null,
   selectedMusicId = '',
-  musicTracks = []
+  musicTracks = [],
+  onGoToNextPart
 }) => {
   const [stitchMusicChoice, setStitchMusicChoice] = useState<string>('preserve');
 
@@ -268,6 +270,46 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                         Save as [{edl.partInfo?.label || `Part ${seriesParts.length + 1}`}] in Series Vault
                       </>
                     )}
+                  </button>
+                )}
+
+                {/* Continue to Next Part Direct Trigger */}
+                {onGoToNextPart && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!isAlreadyInVault && onAddSeriesPart) {
+                        onAddSeriesPart({
+                          label: edl.partInfo?.label || `Part ${seriesParts.length + 1}`,
+                          videoUrl: renderedVideoUrl,
+                          duration: edl.totalDuration,
+                          partNumber: edl.partInfo?.partNumber || seriesParts.length + 1,
+                          videoNumber: edl.partInfo?.videoNumber || 1,
+                          createdAt: Date.now()
+                        });
+                      }
+                      onGoToNextPart(seriesParts.length + 1);
+                    }}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      padding: '0.65rem 1.5rem',
+                      borderRadius: '8px',
+                      background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      color: '#ffffff',
+                      border: 'none',
+                      fontWeight: 700,
+                      fontSize: '0.9rem',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(16, 185, 129, 0.4)',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0px)')}
+                  >
+                    <span>🎬</span>
+                    Create Part {seriesParts.length + 1} Next ➔
                   </button>
                 )}
               </div>
@@ -575,6 +617,72 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                 </div>
               </div>
             ))}
+
+            {/* Next Episode Slot Prompt Card */}
+            {onGoToNextPart && (
+              <div
+                style={{
+                  background: 'rgba(99, 102, 241, 0.04)',
+                  border: '2px dashed rgba(99, 102, 241, 0.4)',
+                  borderRadius: '12px',
+                  padding: '1.25rem',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  textAlign: 'center',
+                  gap: '0.65rem',
+                  minHeight: '220px'
+                }}
+              >
+                <div style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '50%',
+                  background: 'rgba(99, 102, 241, 0.15)',
+                  color: '#818cf8',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.3rem',
+                  fontWeight: 700
+                }}>
+                  +
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.92rem', fontWeight: 700, color: '#f1f5f9' }}>
+                    Part {seriesParts.length + 1}
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#94a3b8', marginTop: '0.2rem', maxWidth: '190px' }}>
+                    Direct next scene or chapter to stitch with EP #{seriesParts.length}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onGoToNextPart(seriesParts.length + 1)}
+                  style={{
+                    marginTop: '0.35rem',
+                    padding: '0.6rem 1.15rem',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(99, 102, 241, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    transition: 'transform 0.15s ease'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0px)')}
+                >
+                  <span>🎬</span> Direct Part {seriesParts.length + 1} ➔
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -666,6 +774,33 @@ export const TimelinePreview: React.FC<TimelinePreviewProps> = ({
                   </>
                 )}
               </button>
+
+              {seriesParts.length === 1 && onGoToNextPart && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => onGoToNextPart(2)}
+                    style={{
+                      background: 'rgba(99, 102, 241, 0.15)',
+                      color: '#a5b4fc',
+                      border: '1px solid rgba(99, 102, 241, 0.35)',
+                      padding: '0.5rem 1.1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.82rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.45rem',
+                      transition: 'all 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.25)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(99, 102, 241, 0.15)')}
+                  >
+                    <span>🎬</span> Click here to direct Part 2 & unlock full-length stitching ➔
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
