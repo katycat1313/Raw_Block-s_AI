@@ -14,7 +14,7 @@ export const RecordAppModal: React.FC<RecordAppModalProps> = ({
   apiBase
 }) => {
   const [url, setUrl] = useState('https://krechetacademy.com');
-  const [targetDuration, setTargetDuration] = useState(8);
+  const [targetDuration, setTargetDuration] = useState(4);
   const [speedMultiplier, setSpeedMultiplier] = useState(1.25);
   const [actionNotes, setActionNotes] = useState('Showcase simulation interface with smooth exploration');
   const [isRecording, setIsRecording] = useState(false);
@@ -133,20 +133,50 @@ export const RecordAppModal: React.FC<RecordAppModalProps> = ({
           />
         </div>
 
-        {/* Duration Slider */}
+        {/* Duration Slider & Micro-Clip Presets */}
         <div style={{ marginBottom: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
             <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e2e8f0' }}>
-              Target Clip Duration
+              Micro-Clip Duration (Short Cuts = High Retention)
             </label>
             <span style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 700 }}>
-              {targetDuration} seconds
+              {targetDuration}s cut
             </span>
           </div>
+
+          {/* Quick Micro-Clip Preset Pills */}
+          <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+            {[
+              { sec: 3, label: '⚡ 3s Micro-Cut' },
+              { sec: 4, label: '🎯 4s Feature Punch (Ideal)' },
+              { sec: 6, label: '🎬 6s Workflow' }
+            ].map(p => (
+              <button
+                key={p.sec}
+                type="button"
+                onClick={() => setTargetDuration(p.sec)}
+                disabled={isRecording}
+                style={{
+                  flex: 1,
+                  padding: '0.35rem 0.4rem',
+                  borderRadius: '6px',
+                  border: `1px solid ${targetDuration === p.sec ? '#6366f1' : '#334155'}`,
+                  background: targetDuration === p.sec ? 'rgba(99, 102, 241, 0.25)' : '#090a0f',
+                  color: targetDuration === p.sec ? '#ffffff' : '#94a3b8',
+                  fontSize: '0.72rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+
           <input
             type="range"
-            min={4}
-            max={20}
+            min={2}
+            max={10}
             step={1}
             value={targetDuration}
             onChange={(e) => setTargetDuration(Number(e.target.value))}

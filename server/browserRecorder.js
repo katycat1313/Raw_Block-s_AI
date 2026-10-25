@@ -154,19 +154,42 @@ export async function recordAppWorkflow({
         await page.waitForTimeout(300);
       }
     } else {
-      // Snappy human showcase: active mouse exploration, feature card hovering, swift smooth scrolling
-      notify('Exploring page with snappy human showcase motion...');
-      await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
-      await page.waitForTimeout(600);
-      await page.evaluate(() => window.__moveCursor && window.__moveCursor(680, 480));
-      await page.waitForTimeout(500);
-      await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 680, y: 480 });
-      await page.evaluate(() => window.scrollBy({ top: 380, behavior: 'smooth' }));
-      await page.waitForTimeout(800);
-      await page.evaluate(() => window.__moveCursor && window.__moveCursor(1120, 540));
-      await page.waitForTimeout(700);
-      await page.evaluate(() => window.scrollBy({ top: -160, behavior: 'smooth' }));
-      await page.waitForTimeout(600);
+      // Dynamic clean micro-clip showcase: timed precisely to target duration
+      notify(`Recording clean ${targetDurationSeconds}s micro-clip showcase...`);
+      if (targetDurationSeconds <= 4) {
+        // Crisp 3-4s micro-cut: Hero glance + CTA click ripple + short smooth scroll
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
+        await page.waitForTimeout(450);
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(820, 480));
+        await page.waitForTimeout(400);
+        await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 820, y: 480 });
+        await page.evaluate(() => window.scrollBy({ top: 260, behavior: 'smooth' }));
+        await page.waitForTimeout(600);
+      } else if (targetDurationSeconds <= 6) {
+        // Punchy 5-6s feature cut
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
+        await page.waitForTimeout(500);
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(680, 480));
+        await page.waitForTimeout(450);
+        await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 680, y: 480 });
+        await page.evaluate(() => window.scrollBy({ top: 350, behavior: 'smooth' }));
+        await page.waitForTimeout(700);
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(1080, 520));
+        await page.waitForTimeout(600);
+      } else {
+        // Extended multi-action flow
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(960, 360));
+        await page.waitForTimeout(600);
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(680, 480));
+        await page.waitForTimeout(500);
+        await page.evaluate(({ x, y }) => window.__showClickRipple && window.__showClickRipple(x, y), { x: 680, y: 480 });
+        await page.evaluate(() => window.scrollBy({ top: 380, behavior: 'smooth' }));
+        await page.waitForTimeout(800);
+        await page.evaluate(() => window.__moveCursor && window.__moveCursor(1120, 540));
+        await page.waitForTimeout(700);
+        await page.evaluate(() => window.scrollBy({ top: -160, behavior: 'smooth' }));
+        await page.waitForTimeout(600);
+      }
     }
 
     notify('Closing browser and flushing video stream...');
@@ -206,6 +229,7 @@ export async function recordAppWorkflow({
         '-crf', '18',
         '-pix_fmt', 'yuv420p',
         '-vf', vfFilters.join(','),
+        '-t', targetDurationSeconds.toString(),
         '-y',
         finalMp4Path
       ];

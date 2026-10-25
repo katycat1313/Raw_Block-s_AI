@@ -26,7 +26,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
     'Awareness video for Krechet Academy: Unlike regular digital marketing courses that only teach passive theory, our platform uses live simulations and workshops that mimic real clients and campaigns. All the work the student completes goes directly into a live portfolio that the certification links to, proving to employers they have genuine hands-on experience. 1-week free trial, then $97/month.'
   );
   const [selectedVoice, setSelectedVoice] = useState('aura-orion-en');
-  const [recordDuration, setRecordDuration] = useState(8);
+  const [recordDuration, setRecordDuration] = useState(4);
   const [speedMultiplier, setSpeedMultiplier] = useState(1.25);
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState('');
@@ -270,19 +270,45 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
               <div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                   <label style={{ fontSize: '0.82rem', fontWeight: 600, color: '#e2e8f0' }}>
-                    ⏱️ App Recording Duration
+                    ⏱️ Micro-Clip Duration
                   </label>
                   <span style={{ fontSize: '0.82rem', color: '#818cf8', fontWeight: 700 }}>
-                    {recordDuration}s
+                    {recordDuration}s cut
                   </span>
+                </div>
+                <div style={{ display: 'flex', gap: '0.35rem', marginBottom: '0.45rem' }}>
+                  {[
+                    { sec: 3, label: '3s Cut' },
+                    { sec: 4, label: '4s Ideal' },
+                    { sec: 6, label: '6s Flow' }
+                  ].map(p => (
+                    <button
+                      key={p.sec}
+                      type="button"
+                      onClick={() => setRecordDuration(p.sec)}
+                      style={{
+                        flex: 1,
+                        padding: '0.25rem 0.3rem',
+                        borderRadius: '5px',
+                        border: `1px solid ${recordDuration === p.sec ? '#6366f1' : '#334155'}`,
+                        background: recordDuration === p.sec ? 'rgba(99, 102, 241, 0.25)' : '#090a0f',
+                        color: recordDuration === p.sec ? '#ffffff' : '#94a3b8',
+                        fontSize: '0.7rem',
+                        fontWeight: 600,
+                        cursor: 'pointer'
+                      }}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
                 </div>
                 <input
                   type="range"
-                  min={4}
-                  max={16}
+                  min={2}
+                  max={8}
                   value={recordDuration}
                   onChange={(e) => setRecordDuration(Number(e.target.value))}
-                  style={{ width: '100%', accentColor: '#6366f1', marginTop: '0.4rem' }}
+                  style={{ width: '100%', accentColor: '#6366f1' }}
                 />
               </div>
             </div>

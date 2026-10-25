@@ -392,7 +392,7 @@ export class VideoAgentOrchestrator {
 
           ${instruction}
 
-          Break the polished narration into 3 to 6 distinct visual beats.
+          Break the polished narration into 3 to 6 snappy, punchy micro-beats (aim for 2.8 to 4.2 seconds per beat for fast-paced commercial editing).
           Return ONLY valid JSON matching this exact structure:
           {
             "beats": [
@@ -451,15 +451,33 @@ export class VideoAgentOrchestrator {
       .replace(/"Krechet Academy"/gi, 'Krechet Academy')
       .trim();
 
-    // 3. Extract sentences
+    // 3. Extract sentences and decompose long clauses into snappy micro-beats (2.8s - 4.5s)
     const rawSentences = clean
       .split(/(?<=[.?!])\s+/)
       .map(s => s.trim())
-      .filter(s => s.length > 10);
+      .filter(s => s.length > 8);
 
-    if (rawSentences.length > 0) {
-      return rawSentences.map((sentence, idx) => {
-        let text = sentence;
+    const microBeats = [];
+    rawSentences.forEach((sentence) => {
+      const words = sentence.split(/\s+/);
+      // If sentence has more than 13 words, break at natural pauses for dynamic cutting
+      if (words.length > 13 && /[,;]|\b(and unlike|unlike|where|while|because|meaning|so that)\b/i.test(sentence)) {
+        const parts = sentence.split(/(?<=[,;])\s+|\s+(?=(?:and unlike|where|while|meaning|so that)\b)/i)
+          .map(p => p.trim())
+          .filter(p => p.length > 12);
+        if (parts.length > 1) {
+          parts.forEach(p => microBeats.push(p));
+          return;
+        }
+      }
+      microBeats.push(sentence);
+    });
+
+    const candidateList = microBeats.length > 0 ? microBeats : rawSentences;
+
+    if (candidateList.length > 0) {
+      return candidateList.map((sentence, idx) => {
+        let text = sentence.replace(/[,;:]+$/g, '').trim();
         if (!/[.?!]$/.test(text)) text += '.';
         text = text.charAt(0).toUpperCase() + text.slice(1);
 
@@ -474,7 +492,7 @@ export class VideoAgentOrchestrator {
           id: `beat_${idx + 1}`,
           text,
           visualGoal: `Show relevant screen action for: "${text.substring(0, 35)}..."`,
-          targetDuration: Math.max(3.0, text.split(/\s+/).length / 2.3)
+          targetDuration: Math.max(2.5, Math.min(4.5, text.split(/\s+/).length / 2.3))
         };
       });
     }
