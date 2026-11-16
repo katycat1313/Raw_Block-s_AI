@@ -58,8 +58,8 @@ export class GeminiService {
     const hasGroundingTool = tools.some((t: any) => 'googleSearch' in t || 'googleSearchRetrieval' in t);
     const generationConfig = hasGroundingTool ? {} : { responseMimeType: jsonMode ? "application/json" : "text/plain" };
 
-    const PRIMARY_MODEL = 'gemini-2.5-flash';
-    const FALLBACK_MODEL = 'gemini-2.5-pro';
+    const PRIMARY_MODEL = 'gemini-3.8-flash';
+    const FALLBACK_MODEL = 'gemini-3.8-flash';
     try {
       const response = await ai.models.generateContent({
         model: PRIMARY_MODEL,

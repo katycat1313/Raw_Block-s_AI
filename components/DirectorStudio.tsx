@@ -1,12 +1,9 @@
 import React from 'react';
 import { CHAPTER_PRESETS, ChapterPreset } from '../constants/chapterPresets';
+import { VoiceSelector } from './VoiceSelector';
+import { VoiceOption } from '../constants/voices';
 
-export interface DeepgramVoice {
-  id: string;
-  name: string;
-  gender: string;
-  style: string;
-}
+export type DeepgramVoice = VoiceOption;
 
 export interface MusicTrack {
   id: string;
@@ -35,9 +32,16 @@ interface DirectorStudioProps {
   setEnableScreenRecordingSpeed: (val: boolean) => void;
   onStartOrchestration: () => void;
   onGenerateFullSequence?: () => void;
+  onGeneratePremiumTofu?: () => void;
+  isGeneratingTofu?: boolean;
   isOrchestrating: boolean;
   clipCount: number;
   seriesPartsCount?: number;
+  onOpenRecordModalWithUrl?: (url?: string, action?: string) => void;
+  blueprint?: any;
+  onOpenTourModal?: () => void;
+  onOpenAuthModal?: () => void;
+  onClearLibrary?: () => void;
 }
 
 export const DirectorStudio: React.FC<DirectorStudioProps> = ({
@@ -61,12 +65,22 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
   setEnableScreenRecordingSpeed,
   onStartOrchestration,
   onGenerateFullSequence,
+  onGeneratePremiumTofu,
+  isGeneratingTofu = false,
   isOrchestrating,
   clipCount,
-  seriesPartsCount = 0
+  seriesPartsCount = 0,
+  onOpenRecordModalWithUrl,
+  blueprint,
+  onOpenTourModal,
+  onOpenAuthModal,
+  onClearLibrary
 }) => {
   const activePromptText = scriptMode === 'prompt_generate' ? userPrompt : (rawScript || userPrompt);
   const partMatch = activePromptText.match(/(?:\[|\b)(?:part|p)\s*([0-9]+)(?:\s*(?:\.|\:)\s*(?:video|v)\s*([0-9]+))?(?:\]|\:|\.|\s|$)/i);
+  const detectedUrlMatch = activePromptText.match(/https?:\/\/[^\s\]\)]+/i);
+  const detectedUrl = detectedUrlMatch ? detectedUrlMatch[0] : null;
+  const detectedAction = detectedUrl ? activePromptText.replace(detectedUrl, '').replace(/\[.*?\]/g, '').trim() : '';
 
   const handleInsertTag = (tag: string) => {
     if (scriptMode === 'prompt_generate') {
@@ -127,28 +141,57 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
           <div>
             <span>🎬 <strong>Series Vault Progress:</strong> {seriesPartsCount} {seriesPartsCount === 1 ? 'part' : 'parts'} safely saved. Ready to direct <strong>Part {seriesPartsCount + 1}</strong>!</span>
           </div>
-          {seriesPartsCount < CHAPTER_PRESETS.length && (
+          <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center' }}>
             <button
               type="button"
-              onClick={() => handleLoadPreset(CHAPTER_PRESETS[seriesPartsCount])}
+              onClick={() => {
+                const el = document.getElementById('master-voiceover-banner') || document.getElementById('single-voiceover-button') || document.getElementById('master-voiceover-button');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                } else {
+                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                }
+              }}
               style={{
                 fontSize: '0.75rem',
                 fontWeight: 700,
                 padding: '4px 10px',
                 borderRadius: '6px',
-                background: '#10b981',
+                background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
                 color: '#ffffff',
                 border: 'none',
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.35rem',
-                boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                boxShadow: '0 2px 8px rgba(168, 85, 247, 0.3)'
               }}
             >
-              <span>⚡ Load {CHAPTER_PRESETS[seriesPartsCount].title}</span> ➔
+              <span>🎙️ Jump to Voiceover Tool ⬇️</span>
             </button>
-          )}
+            {seriesPartsCount < CHAPTER_PRESETS.length && (
+              <button
+                type="button"
+                onClick={() => handleLoadPreset(CHAPTER_PRESETS[seriesPartsCount])}
+                style={{
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  background: '#10b981',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)'
+                }}
+              >
+                <span>⚡ Load {CHAPTER_PRESETS[seriesPartsCount].title}</span> ➔
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -334,6 +377,186 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
         </div>
       </div>
 
+      {/* App Blueprint Hero Section: Guided Tour Knowledge Base */}
+      {blueprint ? (
+        <div style={{
+          background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.15) 0%, rgba(139, 92, 246, 0.1) 100%)',
+          border: '1px solid rgba(99, 102, 241, 0.45)',
+          borderRadius: '12px',
+          padding: '0.9rem 1.1rem',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0.6rem'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>🗺️</span>
+              <div>
+                <span style={{ fontWeight: 800, fontSize: '0.92rem', color: '#c7d2fe' }}>
+                  App Blueprint Active: {blueprint.appName || 'Verified Stage Map'}
+                </span>
+                <span style={{ display: 'block', fontSize: '0.74rem', color: '#a5b4fc', marginTop: '2px' }}>
+                  {blueprint.keyFeatures?.length || 0} features & edit triggers verified from your voice tour
+                </span>
+              </div>
+            </div>
+            {onOpenTourModal && (
+              <button
+                type="button"
+                onClick={onOpenTourModal}
+                style={{
+                  fontSize: '0.74rem',
+                  fontWeight: 700,
+                  background: 'rgba(99, 102, 241, 0.25)',
+                  color: '#c7d2fe',
+                  border: '1px solid rgba(99, 102, 241, 0.5)',
+                  padding: '4px 10px',
+                  borderRadius: '6px',
+                  cursor: 'pointer'
+                }}
+              >
+                🔄 Re-record Tour
+              </button>
+            )}
+          </div>
+
+          {blueprint.keyFeatures && blueprint.keyFeatures.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginTop: '2px' }}>
+              {blueprint.keyFeatures.map((f: any, i: number) => (
+                <span
+                  key={f.id || i}
+                  title={`Trigger: ${f.editOrActionTrigger || 'Direct Click'}`}
+                  style={{
+                    background: 'rgba(15, 23, 42, 0.75)',
+                    border: '1px solid rgba(148, 163, 184, 0.25)',
+                    borderRadius: '6px',
+                    padding: '3px 8px',
+                    fontSize: '0.72rem',
+                    color: '#e2e8f0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <span style={{ color: '#10b981' }}>✓</span> {f.title}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.08)',
+          border: '1px dashed rgba(239, 68, 68, 0.45)',
+          borderRadius: '12px',
+          padding: '0.9rem 1.1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          flexWrap: 'wrap'
+        }}>
+          <div style={{ flex: 1, minWidth: '240px' }}>
+            <span style={{ fontWeight: 800, fontSize: '0.86rem', color: '#fca5a5', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>🗺️</span> Teach the Director Your App (Zero Guesswork)
+            </span>
+            <span style={{ display: 'block', fontSize: '0.75rem', color: '#f87171', marginTop: '3px', lineHeight: '1.35' }}>
+              Record a 30s tour and talk into your mic: show where the edit button is and what does what! The agent learns your app blueprint before directing.
+            </span>
+          </div>
+          {onOpenTourModal && (
+            <button
+              type="button"
+              onClick={onOpenTourModal}
+              style={{
+                background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                color: '#ffffff',
+                border: 'none',
+                padding: '0.6rem 1.1rem',
+                borderRadius: '8px',
+                fontSize: '0.84rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                boxShadow: '0 2px 12px rgba(239, 68, 68, 0.45)',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <span>🔴</span> Record Blueprint Tour (with Mic)
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Starting Web Application URL Context */}
+      <div style={{
+        background: 'rgba(99, 102, 241, 0.05)',
+        border: '1px solid rgba(99, 102, 241, 0.25)',
+        borderRadius: '10px',
+        padding: '0.75rem 0.9rem',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '0.75rem'
+      }}>
+        <div style={{ flex: 1 }}>
+          <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: '#c7d2fe', marginBottom: '0.3rem' }}>
+            🌐 Target App / Starting URL
+          </label>
+          <input
+            type="text"
+            placeholder="https://krechet.academy"
+            value={detectedUrl || 'https://krechet.academy'}
+            onChange={(e) => {
+              const val = e.target.value.trim();
+              if (val) {
+                const cleaned = userPrompt.replace(/\[URL:[^\]]+\]\s*/gi, '').replace(/https?:\/\/[^\s\]\)]+/gi, '').trim();
+                setUserPrompt(`[URL: ${val}] ${cleaned}`);
+              }
+            }}
+            style={{
+              width: '100%',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '6px',
+              border: '1px solid #334155',
+              background: '#090a0f',
+              color: '#f8fafc',
+              fontSize: '0.84rem',
+              outline: 'none',
+              boxSizing: 'border-box'
+            }}
+          />
+        </div>
+        {onOpenAuthModal && (
+          <button
+            type="button"
+            onClick={onOpenAuthModal}
+            style={{
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              color: '#ffffff',
+              border: 'none',
+              padding: '0.6rem 1rem',
+              borderRadius: '8px',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 10px rgba(16, 185, 129, 0.4)'
+            }}
+          >
+            <span>🔐</span> Connect Login & Scout Blocks
+          </button>
+        )}
+        <div style={{ fontSize: '0.72rem', color: '#94a3b8', maxWidth: '220px', lineHeight: '1.3' }}>
+          💡 The agents use this URL as the starting point and automatically record missing screens from it.
+        </div>
+      </div>
+
       {/* Dynamic Single Text Input Area Depending on Selected Mode */}
       {scriptMode === 'prompt_generate' && (
         <div>
@@ -435,34 +658,61 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
         </div>
       )}
 
-      {/* Audio Settings: Deepgram Voice & Background Music */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-        {/* Voice Selector */}
-        <div>
-          <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#94a3b8', marginBottom: '0.3rem' }}>
-            🎙️ Deepgram Human Voice
-          </label>
-          <select
-            value={selectedVoice}
-            onChange={(e) => setSelectedVoice(e.target.value)}
+      {/* Interactive Quick-Action: When a URL is typed in prompt */}
+      {detectedUrl && onOpenRecordModalWithUrl && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.12)',
+          border: '1px solid rgba(239, 68, 68, 0.4)',
+          borderRadius: '10px',
+          padding: '0.75rem 1rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: '0.75rem',
+          fontSize: '0.82rem',
+          color: '#fca5a5'
+        }}>
+          <div>
+            <span style={{ fontWeight: 700, color: '#fecaca', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>🌐</span> Live Web App URL Detected: <code style={{ color: '#fff', background: '#090a0f', padding: '2px 6px', borderRadius: '4px' }}>{detectedUrl}</code>
+            </span>
+            <span style={{ display: 'block', fontSize: '0.74rem', color: '#f87171', marginTop: '3px' }}>
+              This prompt box creates your voiceover script. Click below to record real browser video of this site!
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenRecordModalWithUrl(detectedUrl, detectedAction || 'The mouse moves smoothly to the center of the page')}
             style={{
-              width: '100%',
-              padding: '0.6rem',
+              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+              color: '#ffffff',
+              border: 'none',
+              padding: '0.5rem 1rem',
               borderRadius: '8px',
-              border: '1px solid #334155',
-              background: '#181822',
-              color: '#f8fafc',
-              fontSize: '0.82rem',
-              outline: 'none'
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 2px 10px rgba(239, 68, 68, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.35rem'
             }}
           >
-            {voices.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.name} ({v.style} - {v.gender})
-              </option>
-            ))}
-          </select>
+            <span>🤖</span> Record App Screen Now ➔
+          </button>
         </div>
+      )}
+
+      {/* Audio Settings: Deepgram Voice & Background Music */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', alignItems: 'end' }}>
+        {/* Voice Selector */}
+        <VoiceSelector
+          value={selectedVoice}
+          onChange={setSelectedVoice}
+          voices={voices}
+          label="🎙️ Deepgram Human Voice (54 Voices)"
+        />
 
         {/* Music Selector */}
         <div>
@@ -470,7 +720,7 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
             🎵 Background Music
           </label>
           <select
-            value={selectedMusicId}
+            value={selectedMusicId || 'acoustic_warm_groove.mp3'}
             onChange={(e) => setSelectedMusicId(e.target.value)}
             style={{
               width: '100%',
@@ -483,13 +733,18 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
               outline: 'none'
             }}
           >
-            <option value="">Default (Chill Tech Ambient)</option>
-            {musicTracks.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-            <option value="none">Mute (No Background Music)</option>
+            <option value="acoustic_warm_groove.mp3">🎸 Acoustic Warm Groove (Redwood Trail - Guitar & Beat)</option>
+            <option value="cycles_upbeat_inspiration.mp3">⚡ Cycles Upbeat Inspiration (Modern Uplifting Beat)</option>
+            <option value="serenity_chill_ambient.mp3">🌿 Serenity Chill Ambient (Peaceful Acoustic Flow)</option>
+            <option value="snappy_commercial_beat.mp3">🥁 Snappy Commercial Beat (Fun Bouncy Groove)</option>
+            {musicTracks
+              .filter(m => !['acoustic_warm_groove.mp3', 'cycles_upbeat_inspiration.mp3', 'serenity_chill_ambient.mp3', 'snappy_commercial_beat.mp3', 'chill_tech_ambient.mp3'].includes(m.id))
+              .map((m) => (
+                <option key={m.id} value={m.id}>
+                  🎵 {m.name}
+                </option>
+              ))}
+            <option value="none">🔇 Mute (No Background Music)</option>
           </select>
         </div>
       </div>
@@ -550,25 +805,64 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
 
       {/* Production Buttons: Full Sequence vs Single Scene */}
       <div style={{ marginTop: 'auto', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-        {/* Primary Hero Button: Generate Full Sequence */}
-        {onGenerateFullSequence && (
+        {/* 🚀 Agentic Master Director: Create Premium TOFU Video Ad */}
+        {onGeneratePremiumTofu && (
           <button
             type="button"
-            onClick={onGenerateFullSequence}
-            disabled={isOrchestrating || clipCount === 0}
+            onClick={onGeneratePremiumTofu}
+            disabled={isGeneratingTofu || isOrchestrating}
             style={{
               width: '100%',
               padding: '0.95rem 1.25rem',
               borderRadius: '12px',
               border: 'none',
-              background: clipCount === 0
+              background: isGeneratingTofu
                 ? '#334155'
-                : 'linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)',
+                : 'linear-gradient(135deg, #f59e0b 0%, #ea580c 50%, #c2410c 100%)',
+              color: '#ffffff',
+              fontSize: '0.96rem',
+              fontWeight: 800,
+              cursor: isGeneratingTofu ? 'not-allowed' : 'pointer',
+              boxShadow: isGeneratingTofu ? 'none' : '0 6px 25px rgba(234, 88, 12, 0.45)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.6rem',
+              transition: 'all 0.2s ease',
+              letterSpacing: '0.3px'
+            }}
+          >
+            {isGeneratingTofu ? (
+              <>
+                <span style={{ animation: 'spin 1.5s linear infinite' }}>⏳</span>
+                Agentic Director: Cutting, Burning Text & Mastering Video...
+              </>
+            ) : (
+              <>
+                <span>🔥</span>
+                Agentic Director: Create Premium TOFU Video Ad (Cuts + Kinetic Badges)
+              </>
+            )}
+          </button>
+        )}
+
+        {/* Primary Hero Button: Generate Full Sequence */}
+        {onGenerateFullSequence && (
+          <button
+            type="button"
+            onClick={onGenerateFullSequence}
+            disabled={isOrchestrating}
+            style={{
+              width: '100%',
+              padding: '0.95rem 1.25rem',
+              borderRadius: '12px',
+              border: 'none',
+              background: 'linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%)',
               color: '#ffffff',
               fontSize: '1rem',
               fontWeight: 800,
-              cursor: clipCount === 0 || isOrchestrating ? 'not-allowed' : 'pointer',
-              boxShadow: clipCount === 0 ? 'none' : '0 6px 25px rgba(16, 185, 129, 0.45)',
+              cursor: isOrchestrating ? 'not-allowed' : 'pointer',
+              boxShadow: '0 6px 25px rgba(16, 185, 129, 0.45)',
               transition: 'all 0.2s ease',
               display: 'flex',
               alignItems: 'center',
@@ -585,22 +879,23 @@ export const DirectorStudio: React.FC<DirectorStudioProps> = ({
         <button
           type="button"
           onClick={onStartOrchestration}
-          disabled={isOrchestrating || clipCount === 0}
+          disabled={isOrchestrating}
           style={{
             width: '100%',
-            padding: '0.7rem',
+            padding: '0.75rem',
             borderRadius: '10px',
-            border: '1px solid #3b3955',
-            background: clipCount === 0 ? '#1e293b' : 'rgba(99, 102, 241, 0.15)',
-            color: clipCount === 0 ? '#64748b' : '#c7d2fe',
-            fontSize: '0.84rem',
+            border: '1px solid #6366f1',
+            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(79, 70, 229, 0.35) 100%)',
+            color: '#ffffff',
+            fontSize: '0.88rem',
             fontWeight: 700,
-            cursor: clipCount === 0 || isOrchestrating ? 'not-allowed' : 'pointer',
+            cursor: isOrchestrating ? 'not-allowed' : 'pointer',
             transition: 'all 0.2s ease',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '0.5rem'
+            gap: '0.5rem',
+            boxShadow: '0 2px 10px rgba(99, 102, 241, 0.3)'
           }}
         >
           {isOrchestrating ? (

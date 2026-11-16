@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { DeepgramVoice } from './DirectorStudio';
+import { VoiceSelector } from './VoiceSelector';
+import { VideoGoal, VIDEO_GOAL_CONFIG } from '../types';
 
 interface AutoPilotModalProps {
   isOpen: boolean;
@@ -21,13 +23,14 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
   voices,
   onAutoPilotComplete
 }) => {
-  const [url, setUrl] = useState('https://krechetacademy.com');
+  const [url, setUrl] = useState('https://krechet.academy');
   const [goalPrompt, setGoalPrompt] = useState(
     'Awareness video for Krechet Academy: Unlike regular digital marketing courses that only teach passive theory, our platform uses live simulations and workshops that mimic real clients and campaigns. All the work the student completes goes directly into a live portfolio that the certification links to, proving to employers they have genuine hands-on experience. 1-week free trial, then $97/month.'
   );
-  const [selectedVoice, setSelectedVoice] = useState('aura-orion-en');
+  const [selectedVoice, setSelectedVoice] = useState('flux-wade-en');
   const [recordDuration, setRecordDuration] = useState(4);
   const [speedMultiplier, setSpeedMultiplier] = useState(1.25);
+  const [videoGoal, setVideoGoal] = useState<VideoGoal>(VideoGoal.SIGNUPS);
   const [isRunning, setIsRunning] = useState(false);
   const [currentStep, setCurrentStep] = useState('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -73,7 +76,9 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
           recordDuration,
           speedMultiplier,
           geminiKey,
-          deepgramKey
+          deepgramKey,
+          videoGoal,
+          videoGoalConfig: VIDEO_GOAL_CONFIG[videoGoal]
         })
       });
 
@@ -196,10 +201,71 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
           </div>
         ) : (
           <div>
+            {/* ── Video Goal Selector ───────────────────────────────── */}
+            <div style={{ marginBottom: '1.4rem' }}>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 700, marginBottom: '0.6rem', color: '#e2e8f0' }}>
+                🎯 1. What is the goal of this video?
+              </label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                {(Object.values(VideoGoal) as VideoGoal[]).map((goal) => {
+                  const cfg = VIDEO_GOAL_CONFIG[goal];
+                  const isSelected = videoGoal === goal;
+                  return (
+                    <button
+                      key={goal}
+                      type="button"
+                      onClick={() => setVideoGoal(goal)}
+                      style={{
+                        padding: '0.65rem 0.5rem',
+                        borderRadius: '10px',
+                        border: `1px solid ${isSelected ? 'rgba(99,102,241,0.7)' : '#1e293b'}`,
+                        background: isSelected
+                          ? 'linear-gradient(135deg, rgba(99,102,241,0.25), rgba(168,85,247,0.2))'
+                          : 'rgba(255,255,255,0.03)',
+                        color: isSelected ? '#ffffff' : '#94a3b8',
+                        cursor: 'pointer',
+                        textAlign: 'center',
+                        transition: 'all 0.15s ease',
+                        boxShadow: isSelected ? '0 0 0 1px rgba(99,102,241,0.4), 0 4px 14px rgba(99,102,241,0.2)' : 'none',
+                      }}
+                    >
+                      <div style={{ fontSize: '1.4rem', marginBottom: '0.2rem' }}>{cfg.icon}</div>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '1px' }}>{cfg.label}</div>
+                      <div style={{ fontSize: '0.68rem', opacity: 0.65 }}>{cfg.tagline}</div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected goal detail pill */}
+              {videoGoal && (
+                <div style={{
+                  marginTop: '0.65rem',
+                  padding: '0.6rem 0.85rem',
+                  borderRadius: '8px',
+                  background: 'rgba(99,102,241,0.08)',
+                  border: '1px solid rgba(99,102,241,0.2)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.25rem'
+                }}>
+                  <div style={{ fontSize: '0.74rem', color: '#a5b4fc', fontWeight: 700 }}>
+                    🎬 Hook style: <span style={{ fontWeight: 400, color: '#cbd5e1' }}>{VIDEO_GOAL_CONFIG[videoGoal].hookStyle}</span>
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#a5b4fc', fontWeight: 700 }}>
+                    📢 CTA style: <span style={{ fontWeight: 400, color: '#cbd5e1' }}>{VIDEO_GOAL_CONFIG[videoGoal].ctaStyle}</span>
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: '#a5b4fc', fontWeight: 700 }}>
+                    🎥 Scene hints: <span style={{ fontWeight: 400, color: '#cbd5e1' }}>{VIDEO_GOAL_CONFIG[videoGoal].sceneHints}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Target App URL */}
             <div style={{ marginBottom: '1.2rem' }}>
               <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem', color: '#e2e8f0' }}>
-                1. Target App / Website URL (Playwright will record live 1080p clips)
+                2. Target App / Website URL (Playwright will record live 1080p clips)
               </label>
               <input
                 type="text"
@@ -226,7 +292,7 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
             <div style={{ marginBottom: '1.2rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', flexWrap: 'wrap', gap: '0.4rem' }}>
                 <label style={{ fontSize: '0.85rem', fontWeight: 600, color: '#e2e8f0' }}>
-                  2. Film Goal, Pitch & Key Angles
+                  3. Film Goal, Pitch & Key Angles
                 </label>
                 {partMatch && (
                   <span style={{
@@ -288,30 +354,17 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
             </div>
 
             {/* Voice & Duration Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: '1rem', marginBottom: '1.25rem' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 600, marginBottom: '0.4rem', color: '#e2e8f0' }}>
-                  🎙️ Deepgram Aura Voice
-                </label>
-                <select
+                <VoiceSelector
                   value={selectedVoice}
-                  onChange={(e) => setSelectedVoice(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '0.65rem',
-                    borderRadius: '8px',
-                    border: '1px solid #334155',
-                    background: '#090a0f',
-                    color: '#f8fafc',
-                    fontSize: '0.85rem'
-                  }}
-                >
-                  {voices.map(v => (
-                    <option key={v.id} value={v.id}>
-                      {v.name} ({v.gender} - {v.style})
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedVoice}
+                  voices={voices}
+                  apiBase={apiBase}
+                  label="🎙️ Deepgram Aura Voice (54 Voices)"
+                  backgroundColor="#090a0f"
+                  borderColor="#334155"
+                />
               </div>
 
               <div>
@@ -442,3 +495,4 @@ export const AutoPilotModal: React.FC<AutoPilotModalProps> = ({
     </div>
   );
 };
+

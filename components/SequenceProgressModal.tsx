@@ -1,4 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
+
+const API_BASE = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+  ? `http://${window.location.hostname}:3001`
+  : '';
+
+const normalizeUrl = (url?: string | null) => {
+  if (!url) return null;
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return `${API_BASE}${url}`;
+};
 
 export interface SequenceStep {
   partNumber: number;
@@ -21,6 +31,7 @@ interface SequenceProgressModalProps {
   totalVaultDuration: number;
   onCancel?: () => void;
   onWatchMasterVideo?: () => void;
+  onVideoUpdated?: (newUrl: string) => void;
 }
 
 export const SequenceProgressModal: React.FC<SequenceProgressModalProps> = ({
@@ -33,8 +44,55 @@ export const SequenceProgressModal: React.FC<SequenceProgressModalProps> = ({
   stitchedVideoUrl,
   totalVaultDuration,
   onCancel,
-  onWatchMasterVideo
+  onWatchMasterVideo,
+  onVideoUpdated
 }) => {
+  const [isVoiceoverOpen, setIsVoiceoverOpen] = useState(false);
+  const [voiceoverText, setVoiceoverText] = useState(
+    'Welcome to Krechet Academy. Instead of outdated theory, you learn by executing live digital marketing simulations with real client dossiers and modern AI workflows. Build your portfolio, master practical SEO and unit economics, and future-proof your career today.'
+  );
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [voiceoverSuccess, setVoiceoverSuccess] = useState('');
+  const [currentVideoUrl, setCurrentVideoUrl] = useState<string | null>(stitchedVideoUrl);
+
+  const [modalMusicChoice, setModalMusicChoice] = useState('acoustic_warm_groove.mp3');
+
+  const handleModalAddVoiceover = async (onlyMusic = false) => {
+    const targetUrl = currentVideoUrl || stitchedVideoUrl;
+    if (!targetUrl) return;
+    if (!onlyMusic && !voiceoverText.trim()) {
+      alert('Please enter voiceover narration text.');
+      return;
+    }
+
+    setIsSynthesizing(true);
+    setVoiceoverSuccess('');
+    try {
+      const res = await fetch(`${API_BASE}/api/add-voiceover`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          videoUrl: targetUrl,
+          voiceoverText: onlyMusic ? '' : voiceoverText.trim(),
+          selectedVoice: 'aura-orion-en',
+          selectedMusicId: modalMusicChoice
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to add voiceover');
+
+      const fullUrl = normalizeUrl(data.videoUrl);
+      setCurrentVideoUrl(fullUrl);
+      if (onVideoUpdated && fullUrl) onVideoUpdated(fullUrl);
+      setVoiceoverSuccess(onlyMusic ? '✓ Background music track updated successfully!' : '✓ Real voiceover & music attached to Master Video successfully!');
+    } catch (err: any) {
+      alert(`Error updating audio: ${err.message}`);
+    } finally {
+      setIsSynthesizing(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   const completedCount = steps.filter((s) => s.status === 'completed').length;
@@ -396,9 +454,31 @@ export const SequenceProgressModal: React.FC<SequenceProgressModalProps> = ({
                   </button>
                 )}
 
+                {/* 🎙️ Add / Replace Voiceover Button right in the modal */}
+                <button
+                  type="button"
+                  onClick={() => setIsVoiceoverOpen(!isVoiceoverOpen)}
+                  style={{
+                    padding: '0.65rem 1.4rem',
+                    borderRadius: '8px',
+                    background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    fontWeight: 800,
+                    fontSize: '0.86rem',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.4rem'
+                  }}
+                >
+                  <span>🎙️</span> {isVoiceoverOpen ? 'Hide Voiceover Tool' : 'Add / Replace Voiceover (Salvage)'}
+                </button>
+
                 {stitchedVideoUrl && (
                   <a
-                    href={stitchedVideoUrl}
+                    href={currentVideoUrl || stitchedVideoUrl}
                     download="master_video_sequence.mp4"
                     target="_blank"
                     rel="noreferrer"
@@ -419,6 +499,153 @@ export const SequenceProgressModal: React.FC<SequenceProgressModalProps> = ({
                   </a>
                 )}
               </div>
+
+              {/* Inline Voiceover Salvage Drawer */}
+              {isVoiceoverOpen && (
+                <div style={{
+                  width: '100%',
+                  marginTop: '1rem',
+                  background: '#0a0a14',
+                  border: '1px solid #8b5cf6',
+                  borderRadius: '10px',
+                  padding: '1.15rem',
+                  textAlign: 'left',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                  boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#f8fafc', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span>🎙️</span> Add Spoken Voiceover Narration to Master Video
+                    </div>
+                    <span style={{ fontSize: '0.74rem', color: '#a5b4fc', background: 'rgba(168, 85, 247, 0.2)', padding: '2px 8px', borderRadius: '4px' }}>
+                      Fast 1-Sec Audio Mux
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: '0.76rem', color: '#cbd5e1' }}>
+                    If your video was silent, type or paste the narration you want spoken. Our engine will synthesize crisp English voiceover and mix it with ducked background music!
+                  </p>
+
+                  <textarea
+                    rows={4}
+                    value={voiceoverText}
+                    onChange={(e) => setVoiceoverText(e.target.value)}
+                    placeholder="Enter narration text here..."
+                    style={{
+                      width: '100%',
+                      padding: '0.75rem',
+                      borderRadius: '8px',
+                      border: '1px solid #6366f1',
+                      background: '#131322',
+                      color: '#ffffff',
+                      fontSize: '0.85rem',
+                      outline: 'none',
+                      boxSizing: 'border-box',
+                      lineHeight: '1.4'
+                    }}
+                  />
+
+                  {/* Audio Controls: Background Music Track */}
+                  <div style={{
+                    background: '#151426',
+                    padding: '0.65rem 0.85rem',
+                    borderRadius: '8px',
+                    border: '1px solid #4338ca',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.75rem',
+                    flexWrap: 'wrap'
+                  }}>
+                    <label style={{ fontSize: '0.78rem', fontWeight: 700, color: '#a5b4fc' }}>
+                      🎵 Background Music:
+                    </label>
+                    <select
+                      value={modalMusicChoice}
+                      onChange={(e) => setModalMusicChoice(e.target.value)}
+                      style={{
+                        background: '#0d0d16',
+                        border: '1px solid #6366f1',
+                        color: '#f8fafc',
+                        padding: '0.4rem 0.65rem',
+                        borderRadius: '6px',
+                        fontSize: '0.8rem',
+                        outline: 'none',
+                        flex: 1,
+                        minWidth: '220px'
+                      }}
+                    >
+                      <option value="acoustic_warm_groove.mp3">🎸 Acoustic Warm Groove (Redwood Trail - Guitar & Beat)</option>
+                      <option value="cycles_upbeat_inspiration.mp3">⚡ Cycles Upbeat Inspiration (Modern Uplifting Beat)</option>
+                      <option value="serenity_chill_ambient.mp3">🌿 Serenity Chill Ambient (Peaceful Acoustic Flow)</option>
+                      <option value="snappy_commercial_beat.mp3">🥁 Snappy Commercial Beat (Fun Bouncy Groove)</option>
+                      <option value="none">🔇 Mute Background Music (Voice Only)</option>
+                    </select>
+                  </div>
+
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleModalAddVoiceover(true)}
+                      disabled={isSynthesizing}
+                      style={{
+                        padding: '0.55rem 1.1rem',
+                        borderRadius: '8px',
+                        background: '#1e1e2e',
+                        border: '1px solid #6366f1',
+                        color: '#c7d2fe',
+                        fontWeight: 700,
+                        fontSize: '0.82rem',
+                        cursor: isSynthesizing ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem'
+                      }}
+                    >
+                      <span>🎵</span> Swap Music Only (1-Sec)
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleModalAddVoiceover(false)}
+                      disabled={isSynthesizing || !voiceoverText.trim()}
+                      style={{
+                        padding: '0.65rem 1.4rem',
+                        borderRadius: '8px',
+                        background: 'linear-gradient(135deg, #a855f7 0%, #6366f1 100%)',
+                        color: '#ffffff',
+                        border: 'none',
+                        fontWeight: 800,
+                        fontSize: '0.85rem',
+                        cursor: isSynthesizing || !voiceoverText.trim() ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 4px 15px rgba(168, 85, 247, 0.4)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem'
+                      }}
+                    >
+                      {isSynthesizing ? (
+                        <>
+                          <span style={{ animation: 'spin 1.5s linear infinite' }}>⏳</span>
+                          Applying Audio...
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡</span> Attach Voiceover + Music (1-Sec)
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {voiceoverSuccess && (
+                    <div style={{ fontSize: '0.84rem', color: '#34d399', fontWeight: 700, marginTop: '0.35rem' }}>
+                      {voiceoverSuccess}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

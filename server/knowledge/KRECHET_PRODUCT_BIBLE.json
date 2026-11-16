@@ -1,0 +1,59 @@
+{
+  "productName": "Krechet Marketing Academy",
+  "domain": "krechet.academy",
+  "positioning": "The Digital Marketing Flight Simulator — Master Real Agency Growth Through Weekly Client Simulations, Live Havoc Calls, and Hands-On Sandboxes",
+  "corePhilosophy": {
+    "weeklyClientCadence": "Each week brings a brand-new real-world client with a dedicated simulation tailored to their exact business model, unit economics, and growth bottleneck.",
+    "clientDossierAndMessaging": "Students inspect an in-depth Client Dossier (revenue targets, CAC, LTV, margins, competitor landscape) and can message the client directly to uncover the brand's unfair advantages.",
+    "havocCalls": "Unpredictable emergency phone calls and crisis alerts ('Havoc Calls') interrupt student workflows mid-week (e.g. an accidental $4 promo price, sudden ad account flag, negative press). Students make real-time agency triage decisions, and the client texts back with the outcome.",
+    "justInTimeLearning": "Daily interactive lessons, Socratic AI mentor discussions, and tactical exercises teach everything needed throughout the week so students have all the tools and confidence required to solve and pass that current week's simulation deliverable.",
+    "the97PercentRule": "97% of visitors aren't ready to buy yet. Pushing for a hard sale immediately is like proposing on the first date. We teach ethical, value-first messaging that builds long-term customer trust.",
+    "zeroStockFootageMandate": "100% authentic platform screen recordings. The platform itself has all the drama: live crisis calls, client SMS replies, defect trackers, and real-time CMS audits. Never use generic stock B-roll."
+  },
+  "targetAudience": {
+    "primary": "Aspiring digital marketers, career pivoters, junior agency hires, and agency owners.",
+    "coreFrustration": "Boring 40-hour video courses (Udemy/Coursera) that teach outdated theory with zero real client experience, leaving students with a piece of paper and zero confidence.",
+    "dreamOutcome": "Graduating with verified proof-of-work, hands-on client crisis experience, and portfolio deliverables that land high-paying agency client contracts."
+  },
+  "verifiedProductFeatures": [
+    {
+      "featureCode": "B1",
+      "name": "Weekly Simulation Syllabus & Launcher",
+      "route": "/tutorials or /dashboard",
+      "whatItShows": "Chapter 1 Day 1 roadmap showing the weekly simulation cadence, free trial access without credit cards, and instant launch into the interactive agency cockpit.",
+      "narrativeHook": "Every week introduces a brand-new client and a fresh simulation. No slide decks—just direct hands-on agency immersion from Day 1."
+    },
+    {
+      "featureCode": "B2",
+      "name": "Client Dossier & Direct Client Messaging (Jenny's Artisan Java)",
+      "route": "/client-onboarding/1",
+      "whatItShows": "Deep-dive client dossier for Jenny's Artisan Java Roastery detailing $15k/mo revenue targets, $28 CAC, $120 LTV, and direct client messaging to diagnose her unfair advantage (48-hour roast-to-ship freshness).",
+      "narrativeHook": "Inspect the full client dossier and message Jenny directly. Discover why supermarket coffee is stale and position her 48-hour roast promise to stop paid ad spend bleed."
+    },
+    {
+      "featureCode": "B3",
+      "name": "Live Havoc Calls & Crisis Decision Engine",
+      "route": "/havoc-call or /simulation-workbench",
+      "whatItShows": "High-stakes Havoc Call alert interrupting the session: Jenny texts in a panic over an accidental $4 promo price. Student evaluates tactical agency options, selects Option B (honor $4 + free pour-over), and Jenny texts back thrilled that customers are delighted.",
+      "narrativeHook": "Havoc Calls keep you on your toes. Mid-task, an emergency client crisis interrupts your sandbox, forcing you to make real-time agency decisions under pressure."
+    },
+    {
+      "featureCode": "B4",
+      "name": "SEO Simulation Workbench & Real-Time Defect Engine",
+      "route": "/seo-simulation/1",
+      "whatItShows": "Interactive CMS editor and defect tracker. Student overhauls the flat H1 headline, eliminates hierarchy defects, and triggers real-time audit score recalculation while GA4 telemetry shifts organic search from 6% to 44%.",
+      "narrativeHook": "Everything you learn during the week prepares you to pass the simulation. Edit live heading hierarchies, clear defects, and watch the client's organic traffic surge."
+    },
+    {
+      "featureCode": "B5",
+      "name": "AI Mentor Sarah Jenkins & Tactical Review",
+      "route": "/mentor-dialogue",
+      "whatItShows": "1-on-1 Socratic dialogue with AI Marketing Director Sarah Jenkins, evaluating keyword intent and confirming student deliverables meet professional agency standards.",
+      "narrativeHook": "Never practice alone. AI Marketing Director Sarah Jenkins reviews your deliverables, validates your strategic logic, and certifies your agency proof of work."
+    }
+  ],
+  "visualDirectingRules": {
+    "footageMandate": "100% Platform Screen Footage. NO stock footage under any circumstances.",
+    "rhythm": "Let demonstrations breathe (12s to 35s per beat). Point directly at the client dossier, the Havoc Call modal, the SMS response, and the defect tracker."
+  }
+}

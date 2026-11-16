@@ -244,3 +244,77 @@ export interface AgentStatus {
   progress: number;
 }
 
+
+export enum VideoGoal {
+  COMMENTS = 'comments',
+  CLICKS   = 'clicks',
+  TRAFFIC  = 'traffic',
+  SIGNUPS  = 'signups',
+  SALES    = 'sales',
+  VIEWS    = 'views',
+}
+
+export const VIDEO_GOAL_CONFIG: Record<VideoGoal, {
+  label: string;
+  icon: string;
+  tagline: string;
+  hookStyle: string;
+  ctaStyle: string;
+  sceneHints: string;
+  agentInstruction: string;
+}> = {
+  [VideoGoal.COMMENTS]: {
+    label: 'Comments',
+    icon: '💬',
+    tagline: 'Spark conversation',
+    hookStyle: 'Controversial or polarising opener — poses a question the viewer must answer',
+    ctaStyle: 'End with an open question directed at the viewer ("Drop a comment: have you tried this?")',
+    sceneHints: 'Show relatable pain-points and community moments; avoid hard-sell screens',
+    agentInstruction: 'Optimise for comment rate. Use a debate-sparking hook. End with a direct viewer question. Avoid price mentions — focus on shared experience and relatability.',
+  },
+  [VideoGoal.CLICKS]: {
+    label: 'Clicks',
+    icon: '👆',
+    tagline: 'Drive link taps',
+    hookStyle: 'Curiosity gap or cliffhanger — viewer must click to get the payoff',
+    ctaStyle: 'Prominent verbal CTA + on-screen arrow pointing to link ("Click the link in bio NOW")',
+    sceneHints: 'Show the destination page loading — give a glimpse of what they get after clicking',
+    agentInstruction: 'Optimise for click-through rate. Open with a curiosity gap. Show a preview of the landing destination. Close with an urgent, specific CTA directing viewers to the link.',
+  },
+  [VideoGoal.TRAFFIC]: {
+    label: 'Traffic',
+    icon: '🌐',
+    tagline: 'Drive site visits',
+    hookStyle: 'Authority / proof-based opener — show impressive metrics or results first',
+    ctaStyle: 'State the URL clearly and repeat it; show it on screen ("Visit krechet.academy")',
+    sceneHints: 'Prioritise analytics dashboards, SEO ranking charts, live traffic graphs to signal credibility',
+    agentInstruction: 'Optimise for website visits. Lead with social proof (metrics, results). Show the app live. State and display the URL twice — verbally and on-screen.',
+  },
+  [VideoGoal.SIGNUPS]: {
+    label: 'Sign-ups',
+    icon: '✍️',
+    tagline: 'Capture leads',
+    hookStyle: 'Problem-aware hook — agitate the pain then immediately present the solution',
+    ctaStyle: 'Walk through the sign-up flow on screen; end with "Create your free account today"',
+    sceneHints: 'Must show: registration/onboarding screen, the first win a new user gets, success state',
+    agentInstruction: 'Optimise for sign-up conversion. Agitate the problem in the hook. Demonstrate the onboarding flow visually. End with the registration screen visible and a low-friction CTA (free trial, no credit card).',
+  },
+  [VideoGoal.SALES]: {
+    label: 'Sales',
+    icon: '🛒',
+    tagline: 'Convert buyers',
+    hookStyle: 'Transformation hook — before/after framing or dramatic result reveal',
+    ctaStyle: 'State pricing with anchor ("Normally , today only ") + urgency trigger + buy link',
+    sceneHints: 'Show product in use delivering a clear result; include testimonial text overlay if available',
+    agentInstruction: 'Optimise for purchase conversion. Use a transformation hook. Show the product delivering a tangible result. Include social proof. Close with price, urgency, and a direct buy CTA.',
+  },
+  [VideoGoal.VIEWS]: {
+    label: 'Views',
+    icon: '👁️',
+    tagline: 'Maximise watch-time',
+    hookStyle: 'Pattern interrupt — unexpected visual or bold statement in the first 1-2 seconds',
+    ctaStyle: 'Soft CTA — "Follow for more" or "Save this video"; keep it low friction',
+    sceneHints: 'Prioritise fast-paced, visually varied cuts; show the most striking UI moments first',
+    agentInstruction: 'Optimise for watch-time and view count. Open with a pattern-interrupt visual. Keep cuts tight and energy high. End with a follow or save CTA — do not push hard conversion.',
+  },
+};

@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "start": "serve -s dist -l $PORT",
-    "server": "node server/server.js"
+    "server": "node server/server.js",
+    "bot-login": "node server/botLogin.js"
   },
   "dependencies": {
     "@google/genai": "^1.40.0",

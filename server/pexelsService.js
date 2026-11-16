@@ -48,71 +48,123 @@ export const CURATED_REACTION_CLIPS = [
 ];
 
 /**
- * Search stock B-Roll video clips via Pexels API with curated fallback.
+ * Search free royalty-free stock B-Roll video clips via Coverr CDN (No API key needed).
  */
-export async function searchBrollClips({ query, apiKey, limit = 8 }) {
-  const effectiveApiKey = apiKey || process.env.PEXELS_API_KEY;
-
-  if (!effectiveApiKey) {
-    console.log(`[B-Roll] Searching curated reaction catalog for: "${query}"`);
-    const qLower = (query || '').toLowerCase();
-    const matched = CURATED_REACTION_CLIPS.filter(c => 
-      c.tags.some(t => qLower.includes(t) || t.includes(qLower)) ||
-      c.title.toLowerCase().includes(qLower)
-    );
-    return matched.length > 0 ? matched : CURATED_REACTION_CLIPS;
-  }
-
+export async function searchCoverrClips({ query, limit = 8 }) {
   try {
-    const endpoint = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`;
-    const res = await fetch(endpoint, {
+    console.log(`[B-Roll Coverr] Searching free stock footage for "${query}" (no API key needed)...`);
+    const res = await fetch(`https://coverr.co/s?q=${encodeURIComponent(query)}`, {
       headers: {
-        'Authorization': effectiveApiKey,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RawBlocksStudio/1.0'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
 
     if (!res.ok) {
-      console.warn(`[Pexels API Error ${res.status}], using curated clips fallback.`);
-      return CURATED_REACTION_CLIPS;
+      console.warn(`[Coverr] HTTP ${res.status} response`);
+      return [];
     }
 
-    const data = await res.json();
-    if (!data.videos || data.videos.length === 0) {
-      return CURATED_REACTION_CLIPS;
-    }
+    const html = await res.text();
+    const rawMatches = html.match(/https:\/\/cdn\.coverr\.co\/videos\/([a-zA-Z0-9_-]+)/g) || [];
+    const uniqueSlugs = [...new Set(rawMatches.map(m => m.split('/').pop()))]
+      .filter(slug => !slug.includes('.') && slug.length > 5);
 
-    return (data.videos || []).map(v => {
-      const file = v.video_files?.find(f => f.quality === 'hd' && f.width >= 1280) || v.video_files?.[0];
+    const results = uniqueSlugs.slice(0, limit).map((slug, idx) => {
+      const cleanTitle = slug
+        .replace(/^coverr-/, '')
+        .replace(/^user-ai-generation-[a-zA-Z0-9]+/, `Commercial Shot (${query})`)
+        .replace(/-\d+$/, '')
+        .replace(/-/g, ' ')
+        .replace(/\b\w/g, l => l.toUpperCase());
+
       return {
-        id: `pexels-${v.id}`,
-        title: `Pexels Stock: ${query}`,
-        previewUrl: v.image,
-        videoUrl: file?.link,
-        duration: v.duration,
-        width: file?.width || 1920,
-        height: file?.height || 1080
+        id: `coverr-${slug}-${idx}`,
+        title: cleanTitle || `Stock: ${query}`,
+        previewUrl: `https://cdn.coverr.co/videos/${slug}/thumbnail?width=480&format=jpeg`,
+        videoUrl: `https://cdn.coverr.co/videos/${slug}/1080p.mp4`,
+        duration: 8.0,
+        width: 1920,
+        height: 1080,
+        source: 'coverr'
       };
     });
+
+    console.log(`[B-Roll Coverr] Found ${results.length} free 1080p stock clips for "${query}".`);
+    return results;
   } catch (err) {
-    console.warn('[Pexels Error]', err.message);
-    return CURATED_REACTION_CLIPS;
+    console.warn('[Coverr Search Error]', err.message);
+    return [];
   }
+}
+
+/**
+ * Search stock B-Roll video clips via Pexels API with automatic Coverr fallback.
+ */
+export async function searchBrollClips({ query, apiKey, limit = 8 }) {
+  const effectiveApiKey = apiKey || process.env.PEXELS_API_KEY;
+
+  if (effectiveApiKey) {
+    try {
+      const endpoint = `https://api.pexels.com/videos/search?query=${encodeURIComponent(query)}&per_page=${limit}&orientation=landscape`;
+      const res = await fetch(endpoint, {
+        headers: {
+          'Authorization': effectiveApiKey,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) RawBlocksStudio/1.0'
+        }
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.videos && data.videos.length > 0) {
+          return data.videos.map(v => {
+            const file = v.video_files?.find(f => f.quality === 'hd' && f.width >= 1280) || v.video_files?.[0];
+            return {
+              id: `pexels-${v.id}`,
+              title: `Pexels Stock: ${query}`,
+              previewUrl: v.image,
+              videoUrl: file?.link,
+              duration: v.duration,
+              width: file?.width || 1920,
+              height: file?.height || 1080,
+              source: 'pexels'
+            };
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[Pexels Error]', err.message);
+    }
+  }
+
+  // Coverr: 100% free high-definition B-roll without any API key or credentials required!
+  const coverrResults = await searchCoverrClips({ query, limit });
+  if (coverrResults.length > 0) {
+    return coverrResults;
+  }
+
+  return [];
 }
 
 /**
  * Download or import a selected B-Roll video into server storage and index it as an asset.
  */
-export async function importBrollClip({ videoUrl, title, outputDir }) {
+export async function importBrollClip({ videoUrl, title, clipData, outputDir }) {
+  const effectiveUrl = videoUrl || clipData?.videoUrl;
+  const effectiveTitle = title || clipData?.title || 'Stock B-Roll Reaction';
+
+  if (!effectiveUrl) {
+    throw new Error('videoUrl is required to import B-roll clip');
+  }
+
   const fileId = `broll_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
   const filename = `${fileId}.mp4`;
   const filePath = path.join(outputDir, filename);
 
-  console.log(`[B-Roll] Importing clip: ${title || videoUrl}`);
+  console.log(`[B-Roll] Importing clip: ${effectiveTitle || effectiveUrl}`);
 
   // 1. Check if it's a local stock cache clip
-  if (videoUrl.includes('/storage/stock_cache/')) {
-    const baseName = path.basename(videoUrl);
+  if (effectiveUrl.includes('/storage/stock_cache/')) {
+    const baseName = path.basename(effectiveUrl);
     const localStockPath = path.join(stockCacheDir, baseName);
     if (fs.existsSync(localStockPath)) {
       console.log(`[B-Roll] Copying curated stock clip: ${baseName}`);
@@ -121,7 +173,7 @@ export async function importBrollClip({ videoUrl, title, outputDir }) {
       return {
         filePath,
         filename,
-        title: title || 'Stock B-Roll Reaction',
+        title: effectiveTitle,
         duration: meta.duration,
         width: meta.width,
         height: meta.height
@@ -129,9 +181,9 @@ export async function importBrollClip({ videoUrl, title, outputDir }) {
     }
   }
 
-  // 2. Otherwise download remote URL (e.g. from Pexels API)
+  // 2. Otherwise download remote URL (e.g. from Pexels API or Coverr CDN)
   try {
-    const response = await fetch(videoUrl, {
+    const response = await fetch(effectiveUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }

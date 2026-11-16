@@ -13,14 +13,14 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
   onClipImported,
   apiBase
 }) => {
-  const [query, setQuery] = useState('shaking head');
+  const [query, setQuery] = useState('coffee barista espresso');
   const [results, setResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [importingId, setImportingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      handleSearch('shaking head');
+      handleSearch('coffee barista espresso');
     }
   }, [isOpen]);
 
@@ -70,11 +70,11 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
   };
 
   const QUICK_TAGS = [
-    { label: '🤦 Frustration / Shaking Head', q: 'shaking head' },
-    { label: '👔 Tough Job Interview', q: 'interview' },
-    { label: '💻 Marketing Analytics', q: 'laptop' },
-    { label: '🤝 Hired / Handshake', q: 'handshake' },
-    { label: '🚀 Agency Meeting', q: 'business meeting' }
+    { label: '☕ Artisan Coffee (Jenny\'s Java)', q: 'coffee barista espresso' },
+    { label: '📊 Marketing Agency Team', q: 'digital marketing team' },
+    { label: '💻 Strategy & Analytics', q: 'laptop analytics data' },
+    { label: '🤝 Client Handshake & Hired', q: 'business handshake interview' },
+    { label: '🤦 Frustration / Outdated Courses', q: 'frustrated person computer' }
   ];
 
   return (
@@ -229,19 +229,36 @@ export const StockBrollModal: React.FC<StockBrollModalProps> = ({
                 }}
               >
                 {/* Video Preview */}
-                <div style={{ position: 'relative', width: '100%', height: '120px', background: '#000' }}>
+                <div style={{ position: 'relative', width: '100%', height: '130px', background: '#090a0f', overflow: 'hidden' }}>
+                  {item.previewUrl && (
+                    <img
+                      src={item.previewUrl}
+                      alt={item.title}
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  )}
                   <video
                     src={item.videoUrl}
                     poster={item.previewUrl}
                     controls
                     muted
                     loop
+                    preload="metadata"
                     onMouseEnter={(e) => e.currentTarget.play().catch(() => {})}
                     onMouseLeave={(e) => {
                       e.currentTarget.pause();
                       e.currentTarget.currentTime = 0;
                     }}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    style={{ position: 'relative', zIndex: 1, width: '100%', height: '100%', objectFit: 'cover', background: 'transparent' }}
                   />
                   <span style={{
                     position: 'absolute',

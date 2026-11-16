@@ -1,0 +1,295 @@
+[
+  {
+    "clipId": "clip_1793724994993_2f52",
+    "filename": "agent_rec_1793724994212.mp4",
+    "originalName": "Live Screen (krechet.academy)",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1793724994212.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1793724994212.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_1793724994993_2f52.jpg",
+    "title": "Krechet Academy Platform Dashboard",
+    "description": "A screen recording displaying the dark-themed learning dashboard of Krechet Academy. The UI showcases mission modules, career progression roadmaps, and campaign simulator workbenches.",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "keyActions": [
+      "viewing learning dashboard modules",
+      "displaying career roadmap and active simulators"
+    ],
+    "suggestedHighlights": [
+      "main-canvas",
+      "sidebar"
+    ],
+    "tags": [
+      "Krechet Academy",
+      "dashboard UI",
+      "e-learning",
+      "dark mode",
+      "career progression",
+      "campaign simulator"
+    ],
+    "duration": 1.3,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  },
+  {
+    "clipId": "clip_1793724707278_v3q3",
+    "filename": "agent_rec_1793724706502.mp4",
+    "originalName": "Live Screen (krechet.academy)",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1793724706502.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1793724706502.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_1793724707278_v3q3.jpg",
+    "title": "Krechet Academy Learning Dashboard",
+    "description": "Overview of the dark-mode web application dashboard showing career progression roadmaps and campaign simulator workbenches.",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "keyActions": [
+      "viewing learning modules",
+      "displaying simulator workbenches"
+    ],
+    "suggestedHighlights": [
+      "main-canvas",
+      "sidebar"
+    ],
+    "tags": [
+      "dashboard",
+      "dark mode",
+      "e-learning",
+      "marketing",
+      "UI"
+    ],
+    "duration": 1.334,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  },
+  {
+    "clipId": "clip_1793724181597_ut7f",
+    "filename": "202611030334_1793724181422.mp4",
+    "originalName": "202611030334.mp4",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\202611030334_1793724181422.mp4",
+    "videoUrl": "/storage/uploads/202611030334_1793724181422.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_1793724181597_ut7f.jpg",
+    "title": "Interactive Marketing Course Promo",
+    "description": "Text cards transition to live-action footage of students collaborating at a desk while text overlays describe an interactive marketing simulation course.",
+    "contentType": "live_action",
+    "lightingProfile": "natural",
+    "keyActions": [
+      "Text cards introduce the hands-on marketing simulation concept",
+      "Young adults sit at a shared desk writing notes and working together in an open office setting"
+    ],
+    "suggestedHighlights": [
+      "main-canvas",
+      "center-modal"
+    ],
+    "tags": [
+      "digital marketing",
+      "course promo",
+      "collaborative learning",
+      "students",
+      "simulation training"
+    ],
+    "duration": 43.93,
+    "width": 1080,
+    "height": 2352,
+    "aspectRatio": "9:16"
+  },
+  {
+    "clipId": "clip_broll_1793725058391_zpb7",
+    "filename": "broll_1793725057445_ts2r.mp4",
+    "originalName": "Commercial Shot (Digital Marketing Agency Team Working)",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\broll_1793725057445_ts2r.mp4",
+    "videoUrl": "/storage/uploads/broll_1793725057445_ts2r.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_broll_1793725058391_zpb7.jpg",
+    "title": "Presenter Showcasing Product Jar",
+    "description": "A woman in a professional blazer enthusiastically presents and talks about a cosmetic or wellness jar to the camera in a studio office setting.",
+    "contentType": "live_action",
+    "lightingProfile": "natural",
+    "keyActions": [
+      "holding product jar up beside face",
+      "gesturing toward product with hand while speaking",
+      "bringing product to center with excited expression"
+    ],
+    "suggestedHighlights": [
+      "main-canvas",
+      "top-right"
+    ],
+    "tags": [
+      "product review",
+      "spokesperson",
+      "commercial",
+      "skincare",
+      "marketing"
+    ],
+    "duration": 15.083,
+    "width": 606,
+    "height": 1080,
+    "aspectRatio": "9:16"
+  },
+  {
+    "clipId": "clip_broll_1793725071488_btuk",
+    "filename": "broll_1793725070658_w1hq.mp4",
+    "originalName": "Commercial Shot (Digital Marketing Agency Team Working)",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\broll_1793725070658_w1hq.mp4",
+    "videoUrl": "/storage/uploads/broll_1793725070658_w1hq.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_broll_1793725071488_btuk.jpg",
+    "title": "Woman Presenting Skincare Product",
+    "description": "A woman in professional attire speaks directly to the camera while presenting a branded cream or supplement jar in a studio setting. She enthusiastically highlights the product with expressive gestures.",
+    "contentType": "live_action",
+    "lightingProfile": "natural",
+    "keyActions": [
+      "holding up product container",
+      "gesturing toward the jar while explaining",
+      "lowering product with both hands enthusiastically"
+    ],
+    "suggestedHighlights": [
+      "main-canvas"
+    ],
+    "tags": [
+      "commercial",
+      "product showcase",
+      "spokesperson",
+      "cosmetics",
+      "marketing"
+    ],
+    "duration": 15.083,
+    "width": 606,
+    "height": 1080,
+    "aspectRatio": "9:16"
+  },
+  {
+    "clipId": "clip_scout_1794670811523_1",
+    "filename": "agent_rec_1794670808104.mp4",
+    "originalName": "Main Dashboard & Workspace Overview",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1794670808104.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1794670808104.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_scout_1794670811523_1.jpg",
+    "title": "Main Dashboard & Workspace Overview",
+    "description": "Overview of the platform, marketing lab stats, and primary navigation",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "actionType": "Navigation / Overview",
+    "reusability": "High",
+    "categoryLetter": "B",
+    "blockCode": "B1",
+    "keyActions": [
+      "Navigation / Overview",
+      "Main Dashboard & Workspace Overview"
+    ],
+    "suggestedHighlights": [
+      "center",
+      "top-right"
+    ],
+    "tags": [
+      "Krechet Academy",
+      "Navigation / Overview",
+      "High",
+      "1080p"
+    ],
+    "duration": 4.5,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  },
+  {
+    "clipId": "clip_scout_1794670831075_2",
+    "filename": "agent_rec_1794670829881.mp4",
+    "originalName": "Jenny's Artisan Java: 15-Lesson Action Plan",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1794670829881.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1794670829881.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_scout_1794670831075_2.jpg",
+    "title": "Jenny's Artisan Java: 15-Lesson Action Plan",
+    "description": "Interactive client discovery exercise, lesson cards, and practical study notes",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "actionType": "Feature Walkthrough",
+    "reusability": "High",
+    "categoryLetter": "B",
+    "blockCode": "B2",
+    "keyActions": [
+      "Feature Walkthrough",
+      "Jenny's Artisan Java: 15-Lesson Action Plan"
+    ],
+    "suggestedHighlights": [
+      "center",
+      "top-right"
+    ],
+    "tags": [
+      "Krechet Academy",
+      "Feature Walkthrough",
+      "High",
+      "1080p"
+    ],
+    "duration": 4.5,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  },
+  {
+    "clipId": "clip_scout_1794670850909_3",
+    "filename": "agent_rec_1794670849530.mp4",
+    "originalName": "SEO & Website Studio: H1 Headline & Meta Intent Workbench",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1794670849530.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1794670849530.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_scout_1794670850909_3.jpg",
+    "title": "SEO & Website Studio: H1 Headline & Meta Intent Workbench",
+    "description": "Real-time CMS editing, organic search intent optimization, and instant analytics re-audit",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "actionType": "Interactive Simulation",
+    "reusability": "Targeted",
+    "categoryLetter": "B",
+    "blockCode": "B3",
+    "keyActions": [
+      "Interactive Simulation",
+      "SEO & Website Studio: H1 Headline & Meta Intent Workbench"
+    ],
+    "suggestedHighlights": [
+      "center",
+      "top-right"
+    ],
+    "tags": [
+      "Krechet Academy",
+      "Interactive Simulation",
+      "Targeted",
+      "1080p"
+    ],
+    "duration": 4.5,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  },
+  {
+    "clipId": "clip_scout_1794670866551_4",
+    "filename": "agent_rec_1794670865122.mp4",
+    "originalName": "Skills Radar & Performance Analytics Proof",
+    "filePath": "C:\\Users\\katyc\\.gemini\\antigravity\\scratch\\Raw_Block-s_AI\\server\\storage\\uploads\\agent_rec_1794670865122.mp4",
+    "videoUrl": "/storage/uploads/agent_rec_1794670865122.mp4",
+    "thumbnailUrl": "/storage/thumbnails/clip_scout_1794670866551_4.jpg",
+    "title": "Skills Radar & Performance Analytics Proof",
+    "description": "Real-time competencies radar, client mastery metrics, and proof of work verification",
+    "contentType": "screen_recording",
+    "lightingProfile": "screen_dark",
+    "actionType": "Metrics & Results",
+    "reusability": "High",
+    "categoryLetter": "C",
+    "blockCode": "C4",
+    "keyActions": [
+      "Metrics & Results",
+      "Skills Radar & Performance Analytics Proof"
+    ],
+    "suggestedHighlights": [
+      "center",
+      "top-right"
+    ],
+    "tags": [
+      "Krechet Academy",
+      "Metrics & Results",
+      "High",
+      "1080p"
+    ],
+    "duration": 4.5,
+    "width": 1920,
+    "height": 1080,
+    "aspectRatio": "16:9"
+  }
+]

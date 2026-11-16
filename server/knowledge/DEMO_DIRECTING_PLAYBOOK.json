@@ -1,0 +1,73 @@
+{
+  "version": "2.0.0",
+  "title": "Autonomous Video Producer Directing Playbook & Demo Knowledge Base",
+  "philosophy": {
+    "corePrinciple": "Show, Don't Lecture. Commercial product demos are high-velocity product theater engineered to create awareness, establish undeniable need, and trigger intense desire to get it.",
+    "antiPatterns": [
+      "No Kindergarten Editing: Never loop random unrelated stock footage (e.g. burning matches, generic city shots).",
+      "No Talking Head Monopoly: Never let a voiceover talk about a feature without the exact UI action visible on screen.",
+      "No Static Screen Paralysis: Never hold a still screen for more than 4.5 seconds without a cursor click, highlight zoom, or transition.",
+      "No Clashing Color Profiles: Balance dark mode and light mode across cuts."
+    ]
+  },
+  "narrativeStructures": {
+    "highConvertingDemoArc": {
+      "act1_theHook": {
+        "duration": "3.5s - 5.0s",
+        "objective": "Stop the scroll and dismantle the status quo. Attack the pain point that traditional learning or competitors inflict.",
+        "visualStyle": "Pain agitation B-roll OR high-impact problem cockpit (Day 1 launcher).",
+        "pacing": "Punchy, provocative (14-18 words max)."
+      },
+      "act2_theMechanism": {
+        "duration": "4.0s - 7.0s",
+        "objective": "Reveal the unique solution mechanism. Prove that this is an interactive sandbox, not passive video lectures.",
+        "visualStyle": "Live screen recording of active feature (e.g. Sarah Jenkins 1-on-1 AI Mentorship).",
+        "pacing": "Confident, authoritative, conversational."
+      },
+      "act3_realWorldStakes": {
+        "duration": "4.0s - 8.0s",
+        "objective": "Demonstrate tangible business reality and data proof. Ground the viewer in real client economics and hands-on execution.",
+        "visualStyle": "Client dossier breakdown (Jenny's Artisan Java) followed by live interactive CMS optimization.",
+        "pacing": "Metrics-driven, precise, empowering."
+      },
+      "act4_theTransformationAndCTA": {
+        "duration": "3.5s - 5.5s",
+        "objective": "Show the triumphant end state (career-ready portfolio, verified skills) and issue an irresistible, low-risk call to action.",
+        "visualStyle": "Outcome B-roll (modern team or smiling professional) returning to the branded dashboard with trial trigger.",
+        "pacing": "Inspiring, clear, decisive."
+      }
+    }
+  },
+  "directingRules": [
+    {
+      "id": "RULE_1_SYNCHRONICITY",
+      "name": "Strict Audio-Visual Synchronicity",
+      "mandate": "The eye and the ear must experience the exact same concept simultaneously. When the script mentions 'Sarah Jenkins', the video MUST display Sarah Jenkins. When the script mentions 'H1 headings', the video MUST show the CMS H1 tag being edited."
+    },
+    {
+      "id": "RULE_2_FATIGUE_MANAGEMENT",
+      "name": "The Two-Take Fatigue Ceiling",
+      "mandate": "Never sequence more than 2 consecutive screen recordings without an intentional contextual B-roll breakaway. A commercial demo must breathe between software UI and real-world human context."
+    },
+    {
+      "id": "RULE_3_CONTEXTUAL_BROLL_ONLY",
+      "name": "Contextual B-Roll Relevance",
+      "mandate": "All B-roll MUST directly reflect either: (1) The specific client brand industry (e.g. fresh coffee beans and espresso pours for Jenny's Artisan Java), or (2) The professional marketer's reality (agency team strategizing over laptops, reviewing campaign analytics). Abstract stock like matches, fireworks, or generic crowds is strictly prohibited."
+    },
+    {
+      "id": "RULE_4_USER_BROLL_PRIORITY",
+      "name": "User-Provided B-Roll Primacy",
+      "mandate": "If the user has uploaded their own B-roll clips, the Director Agent MUST prioritize them over all stock downloads. Authentic footage always trumps stock."
+    },
+    {
+      "id": "RULE_5_CADENCE_AND_VELOCITY",
+      "name": "Speech Pacing & Cut Velocity",
+      "mandate": "Voiceover pacing must maintain 2.2 to 2.5 words per second. Visual scene cuts must be locked between 3.2s and 4.8s. Never crowd more words into a beat than the locked video duration can hold."
+    },
+    {
+      "id": "RULE_6_SOUND_HIERARCHY",
+      "name": "Dynamic Audio Ducking",
+      "mandate": "Voiceover volume is the master lead (-14 LUFS). Background music plays at 18% during active voiceover, and swells to 45% during visual transition pauses."
+    }
+  ]
+}

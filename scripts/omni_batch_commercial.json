@@ -1,0 +1,42 @@
+[
+  {
+    "prompt": "Cinematic documentary footage of a young professional sitting alone at a wooden kitchen table late at night working on a glowing laptop. Natural ambient lighting, moody cinematic shadows, authentic exhaustion, typing and rubbing eyes, shallow depth of field, shot on 35mm film, documentary realism, high production value commercial footage, no overacting",
+    "duration": 5,
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "model": "gemini-omni-flash-preview",
+    "output": "C:/Users/katyc/.gemini/antigravity/brain/fb2a50f1-3988-4a29-9397-d361b482efae/omni_scene1_application_struggle.mp4"
+  },
+  {
+    "prompt": "Cinematic documentary commercial footage of an authentic conversation in a sunlit modern coffee shop. A seasoned marketing director in a black jacket speaks honestly across a wooden table with a young job seeker who listens intently. Natural warm cafe lighting, shallow depth of field, authentic expressions, documentary cinematography, high-end commercial quality, no cheesy smiling",
+    "duration": 5,
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "model": "gemini-omni-flash-preview",
+    "output": "C:/Users/katyc/.gemini/antigravity/brain/fb2a50f1-3988-4a29-9397-d361b482efae/omni_scene4_coffee_reality_check.mp4"
+  },
+  {
+    "prompt": "Cinematic documentary footage of a young digital marketer at a clean modern agency desk answering an urgent client video call on a laptop. Marketer speaks calmly and confidently, explaining solutions on screen, authentic corporate realism, soft office lighting, cinematic 35mm film aesthetic, professional commercial quality",
+    "duration": 5,
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "model": "gemini-omni-flash-preview",
+    "output": "C:/Users/katyc/.gemini/antigravity/brain/fb2a50f1-3988-4a29-9397-d361b482efae/omni_scene11_crisis_management.mp4"
+  },
+  {
+    "prompt": "Cinematic commercial footage inside a modern glass conference room. A sharp, confident young digital marketer stands near a presentation screen explaining campaign analytics to two hiring executives who listen attentively. Natural daylight, shallow depth of field, authentic corporate setting, high production value, documentary realism",
+    "duration": 5,
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "model": "gemini-omni-flash-preview",
+    "output": "C:/Users/katyc/.gemini/antigravity/brain/fb2a50f1-3988-4a29-9397-d361b482efae/omni_scene15_mock_interview.mp4"
+  },
+  {
+    "prompt": "Cinematic commercial footage of a confident young professional walking through the glass doors into a sunlit, high-ceiling modern creative agency on their first day of work. Morning sunlight streaming in, natural movement, stylish business attire, inspirational and triumphant ending, high-end commercial cinematography",
+    "duration": 5,
+    "resolution": "720p",
+    "aspect_ratio": "16:9",
+    "model": "gemini-omni-flash-preview",
+    "output": "C:/Users/katyc/.gemini/antigravity/brain/fb2a50f1-3988-4a29-9397-d361b482efae/omni_scene18_agency_arrival.mp4"
+  }
+]

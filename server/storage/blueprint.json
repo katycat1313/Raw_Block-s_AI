@@ -1,0 +1,86 @@
+{
+  "appName": "Krechet Academy (AI Marketing Growth Lab)",
+  "overview": "Krechet Academy is an interactive educational platform and marketing growth simulator designed to train marketers and agency professionals through structured playbooks, hands-on calculators, and AI-assisted workflows.",
+  "targetUrl": "https://krechet.academy",
+  "keyFeatures": [
+    {
+      "id": "action_plan_curriculum_dashboard",
+      "title": "Action Plan Curriculum & Milestone Dashboard",
+      "locationOrRoute": "Main Dashboard (Week 1 Action Plan)",
+      "editOrActionTrigger": "Click 'Start Lesson' on any chapter card or select 'Start Day 1 (Lesson 1.1)' from the top banner",
+      "description": "Displays sequential chapters organized by daily progression ('Learn', 'See & AI Assist', and 'Do'). Each card showcases estimated completion times, skill tags (such as Unit Economics, Break-Even CPA, and Client Discovery), and progress tracking indicators.",
+      "suggestedHighlights": [
+        "center",
+        "top-right"
+      ]
+    },
+    {
+      "id": "interactive_break_even_calculator",
+      "title": "Interactive Break-Even CPA Calculator Simulation",
+      "locationOrRoute": "Dashboard -> Chapter 1.6: Day 2 (Do)",
+      "editOrActionTrigger": "Click the blue 'Start Lesson' button on Chapter 1.6 card",
+      "description": "A hands-on practical simulation module where learners calculate unit economics, profit margins, and target ROAS using real-world business scenarios.",
+      "suggestedHighlights": [
+        "center"
+      ]
+    },
+    {
+      "id": "client_inquiry_simulation_portal",
+      "title": "Client Inquiry & Rapport Simulation Portal",
+      "locationOrRoute": "Dashboard -> Chapter 1.9: Day 3 (Do)",
+      "editOrActionTrigger": "Click 'Start Lesson' on Chapter 1.9 card",
+      "description": "A scenario-based interactive chat and messaging simulation where students practice communicating with client personas like Jenny Miller to build rapport and conduct discovery.",
+      "suggestedHighlights": [
+        "center",
+        "bottom-right"
+      ]
+    },
+    {
+      "id": "growth_lab_sidebar_tools",
+      "title": "Marketing Lab & Playbook Navigation",
+      "locationOrRoute": "Left Sidebar Menu",
+      "editOrActionTrigger": "Click 'A/B Testing Lab' or 'Agency Playbooks' in the left drawer",
+      "description": "Quick-access drawer for core agency tools, specialized testing environments, account settings, and subscription management.",
+      "suggestedHighlights": [
+        "left-sidebar"
+      ]
+    },
+    {
+      "id": "multimodal_learning_and_havoc_calls",
+      "title": "Multimodal Learning & Havoc Crisis Calls",
+      "locationOrRoute": "Curriculum Modules & Live Simulations",
+      "editOrActionTrigger": "Experience multiple-choice knowledge checkpoints, conversational listening, and surprise havoc crisis calls",
+      "description": "Students learn through multiple-choice questions, conversation, listening, and simulation. The curriculum throws curveballs through havoc calls to ensure students are always prepared for unexpected real-world agency crises.",
+      "suggestedHighlights": [
+        "center"
+      ]
+    },
+    {
+      "id": "interview_defense_and_portfolio_readiness",
+      "title": "Interview Defense Prep & Day-1 Job Readiness",
+      "locationOrRoute": "Capstone & Career Interview Lab",
+      "editOrActionTrigger": "Practice articulating, portraying, and defending campaign choices in live interview simulations",
+      "description": "Students learn to speak, portray, and defend their marketing decisions based on the campaigns they built, establishing a strong foundation so they are 100% ready for Day 1 in the professional marketing world.",
+      "suggestedHighlights": [
+        "center",
+        "bottom-right"
+      ]
+    }
+  ],
+  "suggestedStoryline": [
+    {
+      "step": 1,
+      "title": "The Hook",
+      "voiceoverGoal": "Highlight the challenge modern marketers face when moving from theoretical marketing concepts to real agency-level execution.",
+      "visualAction": "Show the Krechet Academy dashboard displaying structured daily roadmaps and interactive simulation chapters."
+    },
+    {
+      "step": 2,
+      "title": "Interactive Execution",
+      "voiceoverGoal": "Demonstrate how students transition seamlessly from learning theory to AI-assisted practice and hands-on calculations.",
+      "visualAction": "Click 'Start Lesson' on an interactive module like Chapter 1.6 (Interactive Break-Even CPA Calculator) or Chapter 1.9 (Client Inquiry Portal) to launch the simulation workbench."
+    }
+  ],
+  "duration": 0,
+  "timestamp": "2026-10-26T21:12:04.171Z"
+}

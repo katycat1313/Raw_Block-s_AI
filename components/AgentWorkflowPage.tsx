@@ -10,6 +10,12 @@ import { RecordAppModal } from './RecordAppModal';
 import { StockBrollModal } from './StockBrollModal';
 import { AutoPilotModal } from './AutoPilotModal';
 import { BlockKeyModal } from './BlockKeyModal';
+import { KnowledgeBlocksModal } from './KnowledgeBlocksModal';
+import { RecordTourModal, AppBlueprint } from './RecordTourModal';
+import { PlatformAuthModal } from './PlatformAuthModal';
+import { CommercialStudioModal } from './CommercialStudioModal';
+import { SocialPublisherModal } from './SocialPublisherModal';
+import { ALL_DEEPGRAM_VOICES } from '../constants/voices';
 
 // Direct backend communication for high-performance video streaming & multipart uploads
 const API_BASE = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -29,10 +35,24 @@ export const AgentWorkflowPage: React.FC = () => {
 
   // Automated Creation Modals
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
+  const [recordInitialUrl, setRecordInitialUrl] = useState('');
+  const [recordInitialAction, setRecordInitialAction] = useState('');
   const [isStockModalOpen, setIsStockModalOpen] = useState(false);
   const [isAutoPilotOpen, setIsAutoPilotOpen] = useState(false);
   const [isKeyModalOpen, setIsKeyModalOpen] = useState(false);
+  const [isKnowledgeModalOpen, setIsKnowledgeModalOpen] = useState(false);
+  const [isTourModalOpen, setIsTourModalOpen] = useState(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isCommercialModalOpen, setIsCommercialModalOpen] = useState(false);
+  const [isSocialModalOpen, setIsSocialModalOpen] = useState(false);
+  const [blueprint, setBlueprint] = useState<AppBlueprint | null>(null);
   const [activeProject, setActiveProject] = useState('krechet_academy');
+
+  const handleOpenRecordModal = (initialUrl?: string, initialAction?: string) => {
+    if (initialUrl) setRecordInitialUrl(initialUrl);
+    if (initialAction) setRecordInitialAction(initialAction);
+    setIsRecordModalOpen(true);
+  };
 
   // Director & Script State
   const [userPrompt, setUserPrompt] = useState('Create a clean, engaging walkthrough of the application workflow and final export.');
@@ -40,10 +60,10 @@ export const AgentWorkflowPage: React.FC = () => {
   const [rawScript, setRawScript] = useState('');
 
   // Audio & Voice State
-  const [voices, setVoices] = useState<DeepgramVoice[]>([]);
-  const [selectedVoice, setSelectedVoice] = useState('aura-orion-en');
+  const [voices, setVoices] = useState<DeepgramVoice[]>(ALL_DEEPGRAM_VOICES);
+  const [selectedVoice, setSelectedVoice] = useState('flux-wade-en');
   const [musicTracks, setMusicTracks] = useState<MusicTrack[]>([]);
-  const [selectedMusicId, setSelectedMusicId] = useState('');
+  const [selectedMusicId, setSelectedMusicId] = useState('acoustic_warm_groove.mp3');
 
   // FX & Lighting Controls
   const [enableLightingEffects, setEnableLightingEffects] = useState(true);
@@ -62,6 +82,7 @@ export const AgentWorkflowPage: React.FC = () => {
   const [isRendering, setIsRendering] = useState(false);
   const [renderProgress, setRenderProgress] = useState('');
   const [renderedVideoUrl, setRenderedVideoUrl] = useState<string | null>(null);
+  const [isGeneratingTofu, setIsGeneratingTofu] = useState(false);
 
   // Episodic / Multi-Part Series State
   const [seriesParts, setSeriesParts] = useState<SeriesPart[]>(() => {
@@ -128,11 +149,28 @@ export const AgentWorkflowPage: React.FC = () => {
     }
   };
 
-  const handleStitchParts = async (partUrls: string[], musicId?: string) => {
+  const handleClearSeriesVault = () => {
+    if (confirm('Are you sure you want to clear the Series Vault and start a fresh sequence with clean clips?')) {
+      setSeriesParts([]);
+      setStitchedVideoUrl(null);
+      localStorage.removeItem('RAW_BLOCKS_SERIES_PARTS');
+    }
+  };
+
+  const handleStitchParts = async (
+    partUrls: string[],
+    musicId?: string,
+    voiceoverOptions?: {
+      text: string;
+      mode: 'exact' | 'ai_generate';
+      voice: string;
+    }
+  ) => {
     if (!partUrls || partUrls.length < 2) {
       alert('Please save at least 2 video parts to stitch into a master video.');
       return;
     }
+    const geminiKey = typeof window !== 'undefined' ? (localStorage.getItem('GEMINI_API_KEY') || '') : '';
     setIsStitching(true);
     setStitchedVideoUrl(null);
     try {
@@ -141,7 +179,11 @@ export const AgentWorkflowPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           partUrls,
-          selectedMusicId: musicId && musicId !== 'preserve' ? musicId : 'none'
+          selectedMusicId: musicId || 'none',
+          voiceoverText: voiceoverOptions?.text || '',
+          voiceoverMode: voiceoverOptions?.mode || 'exact',
+          selectedVoice: voiceoverOptions?.voice || 'aura-orion-en',
+          geminiKey
         })
       });
 
@@ -175,11 +217,6 @@ export const AgentWorkflowPage: React.FC = () => {
   const totalVaultDuration = seriesParts.reduce((acc, p) => acc + (p.duration || 0), 0);
 
   const handleGenerateFullSequence = async () => {
-    if (clips.length === 0) {
-      alert('Please upload, record, or import at least one video clip first.');
-      return;
-    }
-
     // Determine the scenes: check if user provided a multi-part script or use CHAPTER_PRESETS
     const currentScript = (rawScript || userPrompt || '').trim();
     
@@ -323,7 +360,7 @@ export const AgentWorkflowPage: React.FC = () => {
       // 5. Automatic Stitching into Master Video
       if (!sequenceAbortRef.current && renderedPartUrls.length >= 2) {
         setSequenceStatus(`🧵 Seamlessly stitching all ${renderedPartUrls.length} scenes into master feature film...`);
-        await handleStitchParts(renderedPartUrls, selectedMusicId || 'preserve');
+        await handleStitchParts(renderedPartUrls, selectedMusicId || 'acoustic_warm_groove.mp3');
         setSequenceStatus(`🎉 Full sequence generation and stitching complete!`);
       }
     } catch (err: any) {
@@ -358,6 +395,27 @@ export const AgentWorkflowPage: React.FC = () => {
     fetchInitialData();
   }, []);
 
+  const fetchClips = async () => {
+    try {
+      const clipsRes = await fetch(`${API_BASE}/api/clips`);
+      if (clipsRes.ok) {
+        const cData = await clipsRes.json();
+        if (cData.project) setActiveProject(cData.project);
+        const mappedClips = (cData.clips || []).map((c: any) => ({
+          ...c,
+          videoUrl: normalizeUrl(c.videoUrl),
+          thumbnailUrl: normalizeUrl(c.thumbnailUrl)
+        }));
+        setClips(mappedClips);
+        if (cData.latestRenderUrl) {
+          setRenderedVideoUrl((prev) => prev || normalizeUrl(cData.latestRenderUrl));
+        }
+      }
+    } catch (err) {
+      console.warn('fetchClips warning:', err);
+    }
+  };
+
   const fetchInitialData = async () => {
     try {
       // 1. Health check
@@ -389,24 +447,60 @@ export const AgentWorkflowPage: React.FC = () => {
       }
 
       // 4. Fetch existing uploaded clips
-      const clipsRes = await fetch(`${API_BASE}/api/clips`);
-      if (clipsRes.ok) {
-        const cData = await clipsRes.json();
-        if (cData.project) setActiveProject(cData.project);
-        const mappedClips = (cData.clips || []).map((c: any) => ({
-          ...c,
-          videoUrl: normalizeUrl(c.videoUrl),
-          thumbnailUrl: normalizeUrl(c.thumbnailUrl)
-        }));
-        setClips(mappedClips);
+      await fetchClips();
+
+      // 5. Fetch active App Blueprint
+      const bpRes = await fetch(`${API_BASE}/api/blueprint`);
+      if (bpRes.ok) {
+        const bpData = await bpRes.json();
+        if (bpData.blueprint) setBlueprint(bpData.blueprint);
       }
     } catch (err) {
       console.warn('Initial data fetch warning:', err);
     }
   };
 
+  const handleClearLibrary = async () => {
+    if (!confirm('Clear all stored clips from the library to start fresh?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/api/clips/clear-all`, { method: 'POST' });
+      if (res.ok) {
+        setClips([]);
+      }
+    } catch (err: any) {
+      alert(`Clear error: ${err.message}`);
+    }
+  };
+
+  const handleImportObsTakes = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/takes/import-obs`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to import OBS takes');
+      }
+      if (data.allClips) {
+        setClips(data.allClips.map((c: any) => ({
+          ...c,
+          videoUrl: normalizeUrl(c.videoUrl) || c.videoUrl,
+          thumbnailUrl: normalizeUrl(c.thumbnailUrl)
+        })));
+      }
+      alert(`🎉 Successfully ingested ${data.imported?.length || 4} authentic OBS takes + B-roll blocks into your library!`);
+    } catch (err: any) {
+      alert(`Import error: ${err.message}`);
+    }
+  };
+
   // Upload Clips Handler
   const handleUploadClips = async (files: FileList) => {
+    const fileList = Array.from(files);
+    const emptyFile = fileList.find((f) => f.size === 0);
+    if (emptyFile) {
+      alert(`⚠️ Cannot upload "${emptyFile.name}" because the file size is 0 bytes (empty).\n\nIf you downloaded this clip from Google Drive or Phone Link, the download may have failed or was saved as a placeholder.\n\nPlease re-download the file from Google Drive until it shows its full size (e.g., 10MB–50MB), then upload.`);
+      return;
+    }
+
     setIsUploading(true);
     try {
       const formData = new FormData();
@@ -474,11 +568,6 @@ export const AgentWorkflowPage: React.FC = () => {
 
   // Orchestrate Video Production
   const handleStartOrchestration = async () => {
-    if (clips.length === 0) {
-      alert('Please upload, record, or import at least one video clip first.');
-      return;
-    }
-
     setIsOrchestrating(true);
     setIsBoardroomOpen(true);
     setIsOrchestrationComplete(false);
@@ -495,6 +584,8 @@ export const AgentWorkflowPage: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userPrompt,
+          targetUrl: recordInitialUrl || 'https://krechet.academy',
+          autoRecordScreens: true,
           scriptMode,
           rawScript,
           selectedVoice,
@@ -524,6 +615,7 @@ export const AgentWorkflowPage: React.FC = () => {
       setEdl(data.edl);
       setIsOrchestrationComplete(true);
       setOrchestratorStatus('Master timeline successfully locked and approved.');
+      fetchClips();
     } catch (err: any) {
       alert(`Orchestration error: ${err.message}`);
       setOrchestratorStatus(`Error: ${err.message}`);
@@ -565,6 +657,38 @@ export const AgentWorkflowPage: React.FC = () => {
       setRenderProgress(`Failed: ${err.message}`);
     } finally {
       setIsRendering(false);
+    }
+  };
+
+  const handleGeneratePremiumTofu = async () => {
+    setIsGeneratingTofu(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/generate-premium-tofu`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          selectedVoice,
+          selectedMusicId,
+          geminiKey: typeof window !== 'undefined' ? (localStorage.getItem('GEMINI_API_KEY') || '') : '',
+          deepgramKey: typeof window !== 'undefined' ? (localStorage.getItem('DEEPGRAM_API_KEY') || '') : ''
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to generate premium TOFU video');
+
+      if (data.videoUrl) {
+        const fullUrl = normalizeUrl(data.videoUrl);
+        setRenderedVideoUrl(fullUrl);
+        await fetchClips();
+        setTimeout(() => {
+          const el = document.querySelector('video');
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 600);
+      }
+    } catch (err: any) {
+      alert(`Error building TOFU video: ${err.message}`);
+    } finally {
+      setIsGeneratingTofu(false);
     }
   };
 
@@ -664,6 +788,46 @@ export const AgentWorkflowPage: React.FC = () => {
           </span>
 
           <button
+            onClick={() => setIsCommercialModalOpen(true)}
+            style={{
+              padding: '0.45rem 1rem',
+              borderRadius: '8px',
+              border: '1px solid #facc15',
+              background: 'linear-gradient(135deg, #b45309, #d97706)',
+              color: '#ffffff',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontWeight: 800,
+              boxShadow: '0 2px 10px rgba(217, 119, 6, 0.4)'
+            }}
+          >
+            🎬 Commercial Director (Omni AI)
+          </button>
+
+          <button
+            onClick={() => setIsSocialModalOpen(true)}
+            style={{
+              padding: '0.45rem 1rem',
+              borderRadius: '8px',
+              border: '1px solid #ff0050',
+              background: 'linear-gradient(135deg, #ff0050 0%, #00f2fe 100%)',
+              color: '#ffffff',
+              fontSize: '0.82rem',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              fontWeight: 800,
+              boxShadow: '0 2px 10px rgba(255, 0, 80, 0.4)'
+            }}
+          >
+            📱 Link TikTok & FB / Post
+          </button>
+
+          <button
             onClick={() => setIsAutoPilotOpen(true)}
             style={{
               padding: '0.45rem 1rem',
@@ -725,9 +889,12 @@ export const AgentWorkflowPage: React.FC = () => {
             onUpload={handleUploadClips}
             onDeleteClip={handleDeleteClip}
             isUploading={isUploading}
-            onOpenRecordModal={() => setIsRecordModalOpen(true)}
+            onOpenRecordModal={() => handleOpenRecordModal()}
             onOpenStockModal={() => setIsStockModalOpen(true)}
+            onOpenKnowledgeModal={() => setIsKnowledgeModalOpen(true)}
             onOpenKeyModal={() => setIsKeyModalOpen(true)}
+            onClearLibrary={handleClearLibrary}
+            onImportObsTakes={handleImportObsTakes}
             activeProject={activeProject}
           />
 
@@ -753,9 +920,16 @@ export const AgentWorkflowPage: React.FC = () => {
             setEnableScreenRecordingSpeed={setEnableScreenRecordingSpeed}
             onStartOrchestration={handleStartOrchestration}
             onGenerateFullSequence={handleGenerateFullSequence}
+            onGeneratePremiumTofu={handleGeneratePremiumTofu}
+            isGeneratingTofu={isGeneratingTofu}
+            onOpenRecordModalWithUrl={handleOpenRecordModal}
             isOrchestrating={isOrchestrating}
             clipCount={clips.length}
             seriesPartsCount={seriesParts.length}
+            blueprint={blueprint}
+            onOpenTourModal={() => setIsTourModalOpen(true)}
+            onOpenAuthModal={() => setIsAuthModalOpen(true)}
+            onClearLibrary={handleClearLibrary}
           />
         </div>
 
@@ -769,6 +943,7 @@ export const AgentWorkflowPage: React.FC = () => {
           seriesParts={seriesParts}
           onAddSeriesPart={handleAddSeriesPart}
           onRemoveSeriesPart={handleRemoveSeriesPart}
+          onClearSeriesVault={handleClearSeriesVault}
           onStitchParts={handleStitchParts}
           isStitching={isStitching}
           stitchedVideoUrl={stitchedVideoUrl}
@@ -791,6 +966,7 @@ export const AgentWorkflowPage: React.FC = () => {
         totalVaultDuration={totalVaultDuration}
         onCancel={handleCancelSequence}
         onWatchMasterVideo={handleWatchMasterVideo}
+        onVideoUpdated={(newUrl) => setStitchedVideoUrl(newUrl)}
       />
 
       {/* Real-Time Agent Dialogue Modal */}
@@ -811,6 +987,26 @@ export const AgentWorkflowPage: React.FC = () => {
         onClose={() => setIsRecordModalOpen(false)}
         onClipRecorded={handleAddNewClip}
         apiBase={API_BASE}
+        initialUrl={recordInitialUrl}
+        initialAction={recordInitialAction}
+      />
+
+      {/* App Blueprint Tour Recorder Modal (Screen + Mic Voiceover) */}
+      <RecordTourModal
+        isOpen={isTourModalOpen}
+        onClose={() => setIsTourModalOpen(false)}
+        onBlueprintCreated={(bp) => {
+          setBlueprint(bp);
+          fetchClips();
+          if (bp.suggestedStoryline && bp.suggestedStoryline.length > 0 && !rawScript) {
+            const firstScene = bp.suggestedStoryline[0];
+            if (firstScene.voiceoverGoal) {
+              setUserPrompt(`[Part 1] ${firstScene.voiceoverGoal}. Explore ${bp.appName} to see real student campaign execution.`);
+            }
+          }
+        }}
+        apiBase={API_BASE}
+        targetUrl={recordInitialUrl || 'https://krechet.academy'}
       />
 
       {/* Stock Reaction B-Roll Modal */}
@@ -851,6 +1047,37 @@ export const AgentWorkflowPage: React.FC = () => {
         onProjectSwitched={() => {
           fetchInitialData();
         }}
+      />
+
+      {/* Knowledge Blocks & Intelligence Layer Modal */}
+      <KnowledgeBlocksModal
+        isOpen={isKnowledgeModalOpen}
+        onClose={() => setIsKnowledgeModalOpen(false)}
+        apiBase={API_BASE}
+      />
+
+      {/* Platform Login & Autonomous Scout Modal */}
+      <PlatformAuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
+        apiBase={API_BASE}
+        onScoutComplete={() => {
+          fetchClips();
+        }}
+      />
+
+      {/* Commercial Director & Gemini Omni Studio Modal */}
+      <CommercialStudioModal
+        isOpen={isCommercialModalOpen}
+        onClose={() => setIsCommercialModalOpen(false)}
+        apiBase={API_BASE}
+      />
+
+      {/* Social Cookie Auth & One-Click Publisher Modal (TikTok & Facebook) */}
+      <SocialPublisherModal
+        isOpen={isSocialModalOpen}
+        onClose={() => setIsSocialModalOpen(false)}
+        apiBase={API_BASE}
       />
     </div>
   );

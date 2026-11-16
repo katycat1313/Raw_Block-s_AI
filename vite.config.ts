@@ -6,14 +6,31 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, '.', '');
   return {
     server: {
-      port: 3000,
+      port: 3005,
       host: '0.0.0.0',
+      allowedHosts: true,
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
           changeOrigin: true
         },
         '/storage': {
+          target: 'http://localhost:3001',
+          changeOrigin: true
+        },
+        '/renders': {
+          target: 'http://localhost:3001',
+          changeOrigin: true
+        },
+        '/uploads': {
+          target: 'http://localhost:3001',
+          changeOrigin: true
+        },
+        '/thumbnails': {
+          target: 'http://localhost:3001',
+          changeOrigin: true
+        },
+        '/audio': {
           target: 'http://localhost:3001',
           changeOrigin: true
         }

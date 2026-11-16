@@ -104,6 +104,47 @@ export async function generateThumbnail(videoPath, outputPath, timestampSeconds 
 }
 
 /**
+ * Slice a video segment from startSec with durationSec, re-encoding to standardized H.264 1080p MP4.
+ */
+export async function sliceVideoSegment(inputPath, outputPath, startSec = 0, durationSec = 6) {
+  return trimSegment({ inputPath, outputPath, startSec, durationSec, keepAudio: false });
+}
+
+/**
+ * Trim a precise video segment with optional audio preservation and high-quality 1080p scaling.
+ */
+export async function trimSegment({ inputPath, outputPath, startSec = 0, durationSec = 5, keepAudio = true }) {
+  return new Promise((resolve, reject) => {
+    const dir = path.dirname(outputPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    const args = [
+      '-nostdin',
+      '-ss', startSec.toString(),
+      '-i', inputPath,
+      '-t', durationSec.toString(),
+      '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black',
+      '-c:v', 'libx264',
+      '-preset', 'fast',
+      '-crf', '20',
+      '-pix_fmt', 'yuv420p',
+      ...(keepAudio ? ['-c:a', 'aac', '-b:a', '192k'] : ['-an']),
+      '-movflags', '+faststart',
+      '-y',
+      outputPath
+    ];
+
+    execFile(FFMPEG_PATH, args, (err, stdout, stderr) => {
+      if (err) {
+        console.error('[FFmpeg trimSegment error]:', stderr || err.message);
+        return reject(err);
+      }
+      resolve(outputPath);
+    });
+  });
+}
+
+/**
  * Generate a synthetic ambient music track for testing / offline use.
  */
 export async function generateSampleAmbientMusic(outputPath, durationSeconds = 60) {
@@ -324,9 +365,9 @@ export async function renderTimeline({
  */
 export async function addVoiceoverToVideo({
   videoPath,
-  voiceoverAudioPath,
+  voiceoverAudioPath = null,
   musicAudioPath = null,
-  musicVolume = 0.15,
+  musicVolume = 0.28,
   outputPath
 }) {
   return new Promise((resolve, reject) => {
@@ -334,23 +375,35 @@ export async function addVoiceoverToVideo({
       if (!fs.existsSync(videoPath)) {
         return reject(new Error(`Source video not found: ${videoPath}`));
       }
-      if (!fs.existsSync(voiceoverAudioPath)) {
-        return reject(new Error(`Voiceover audio not found: ${voiceoverAudioPath}`));
-      }
 
-      const inputs = ['-nostdin', '-i', videoPath, '-i', voiceoverAudioPath];
+      const inputs = ['-nostdin', '-i', videoPath];
       let complexFilter = '';
-      let audioMap = '-map 0:v -map 1:a';
+      let audioMap = '';
 
-      if (musicAudioPath && fs.existsSync(musicAudioPath)) {
+      const hasVoiceover = voiceoverAudioPath && fs.existsSync(voiceoverAudioPath);
+      const hasMusic = musicAudioPath && fs.existsSync(musicAudioPath);
+
+      if (hasVoiceover && hasMusic) {
+        inputs.push('-i', voiceoverAudioPath);
         inputs.push('-stream_loop', '-1', '-i', musicAudioPath);
         complexFilter = `
-          [1:a]volume=1.4[vo_boost];
+          [1:a]asplit=2[vo_mix][vo_sc];
+          [vo_mix]volume=1.4[vo_loud];
           [2:a]volume=${musicVolume}[bgm_raw];
-          [bgm_raw][vo_boost]sidechaincompress=threshold=0.12:ratio=3:attack=30:release=600[ducked_bgm];
-          [vo_boost][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]
+          [bgm_raw][vo_sc]sidechaincompress=threshold=0.12:ratio=3:attack=30:release=600[ducked_bgm];
+          [vo_loud][ducked_bgm]amix=inputs=2:duration=first:dropout_transition=2:normalize=0[aout]
         `.replace(/\s+/g, '');
         audioMap = '-map 0:v -map [aout]';
+      } else if (hasVoiceover) {
+        inputs.push('-i', voiceoverAudioPath);
+        complexFilter = `[1:a]volume=1.4[aout]`.replace(/\s+/g, '');
+        audioMap = '-map 0:v -map [aout]';
+      } else if (hasMusic) {
+        inputs.push('-stream_loop', '-1', '-i', musicAudioPath);
+        complexFilter = `[1:a]volume=0.55[aout]`.replace(/\s+/g, '');
+        audioMap = '-map 0:v -map [aout]';
+      } else {
+        return reject(new Error('Neither voiceover nor background music was provided.'));
       }
 
       const args = [
@@ -383,7 +436,7 @@ export async function addVoiceoverToVideo({
 export async function stitchVideoParts({
   videoPaths, // Array of filePaths for each part
   musicAudioPath = null,
-  musicVolume = 0.15,
+  musicVolume = 0.55,
   outputPath,
   onProgress
 }) {
@@ -434,7 +487,7 @@ export async function stitchVideoParts({
             '-i', concatenatedVideoPath,
             '-stream_loop', '-1',
             '-i', musicAudioPath,
-            '-filter_complex', `[1:a]volume=${musicVolume}[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]`,
+            '-filter_complex', `[1:a]volume=${musicVolume}[aout]`,
             '-map', '0:v',
             '-map', '[aout]',
             '-c:v', 'copy',

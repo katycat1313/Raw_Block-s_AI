@@ -21,6 +21,8 @@ export interface VideoClip {
   blockRole?: string;
   blockCode?: string;
   categoryLetter?: string;
+  actionType?: string;
+  reusability?: string;
 }
 
 export interface BlockRoleInfo {
@@ -159,7 +161,10 @@ interface ClipLibraryProps {
   isUploading: boolean;
   onOpenRecordModal: () => void;
   onOpenStockModal: () => void;
+  onOpenKnowledgeModal?: () => void;
   onOpenKeyModal?: () => void;
+  onClearLibrary?: () => void;
+  onImportObsTakes?: () => Promise<void>;
   activeProject?: string;
 }
 
@@ -170,13 +175,18 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
   isUploading,
   onOpenRecordModal,
   onOpenStockModal,
+  onOpenKnowledgeModal,
   onOpenKeyModal,
+  onClearLibrary,
+  onImportObsTakes,
   activeProject = 'krechet_academy'
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [isImportingObs, setIsImportingObs] = useState(false);
+  const [previewClip, setPreviewClip] = useState<VideoClip | null>(null);
 
   const handleDrop = async (e: React.DragEvent) => {
     e.preventDefault();
@@ -250,28 +260,48 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
           </h3>
           <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>
             Folder: <strong style={{ color: '#c7d2fe' }}>📁 {activeProject}</strong> • {clips.length} labeled blocks ready
+            {clips.length > 0 && onClearLibrary && (
+              <button
+                type="button"
+                onClick={onClearLibrary}
+                title="Wipe current clips to start fresh"
+                style={{
+                  marginLeft: '0.65rem',
+                  fontSize: '0.7rem',
+                  fontWeight: 600,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#f87171',
+                  border: '1px solid rgba(239, 68, 68, 0.4)',
+                  borderRadius: '5px',
+                  padding: '2px 7px',
+                  cursor: 'pointer'
+                }}
+              >
+                🗑️ Clear All
+              </button>
+            )}
           </span>
         </div>
       </div>
 
       {/* Creation & Key Actions */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.85rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: onImportObsTakes ? '1fr 1fr 1.25fr 0.95fr' : '1fr 1fr 1fr', gap: '0.45rem', marginBottom: '0.85rem' }}>
         <button
           type="button"
           onClick={onOpenRecordModal}
           style={{
-            padding: '0.65rem 0.5rem',
+            padding: '0.65rem 0.4rem',
             borderRadius: '8px',
             border: '1px solid rgba(239, 68, 68, 0.4)',
             background: 'rgba(239, 68, 68, 0.1)',
             color: '#f87171',
-            fontSize: '0.78rem',
+            fontSize: '0.76rem',
             fontWeight: 700,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '0.35rem',
+            gap: '0.3rem',
             transition: 'background 0.2s'
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)')}
@@ -284,18 +314,18 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
           type="button"
           onClick={onOpenStockModal}
           style={{
-            padding: '0.65rem 0.5rem',
+            padding: '0.65rem 0.4rem',
             borderRadius: '8px',
             border: '1px solid rgba(16, 185, 129, 0.4)',
             background: 'rgba(16, 185, 129, 0.1)',
             color: '#34d399',
-            fontSize: '0.78rem',
+            fontSize: '0.76rem',
             fontWeight: 700,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: '0.35rem',
+            gap: '0.3rem',
             transition: 'background 0.2s'
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.2)')}
@@ -304,22 +334,83 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
           <span>🎥</span> Stock B-Roll
         </button>
 
+        {onImportObsTakes && (
+          <button
+            type="button"
+            onClick={async () => {
+              if (isImportingObs) return;
+              setIsImportingObs(true);
+              try {
+                await onImportObsTakes();
+              } finally {
+                setIsImportingObs(false);
+              }
+            }}
+            disabled={isImportingObs}
+            title="Import authentic OBS takes recorded 10/31 from your Videos folder"
+            style={{
+              padding: '0.65rem 0.4rem',
+              borderRadius: '8px',
+              border: '1px solid rgba(59, 130, 246, 0.5)',
+              background: isImportingObs ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.15)',
+              color: '#60a5fa',
+              fontSize: '0.76rem',
+              fontWeight: 700,
+              cursor: isImportingObs ? 'wait' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.3rem',
+              transition: 'background 0.2s'
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(59, 130, 246, 0.25)')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = isImportingObs ? 'rgba(59, 130, 246, 0.3)' : 'rgba(59, 130, 246, 0.15)')}
+          >
+            <span>{isImportingObs ? '⏳' : '🎬'}</span> {isImportingObs ? 'Ingesting...' : 'Ingest 10/31 Takes'}
+          </button>
+        )}
+
         <button
           type="button"
-          onClick={onOpenKeyModal}
+          onClick={onOpenKnowledgeModal}
           style={{
-            padding: '0.65rem 0.5rem',
+            padding: '0.65rem 0.6rem',
             borderRadius: '8px',
-            border: '1px solid rgba(168, 85, 247, 0.4)',
-            background: 'rgba(168, 85, 247, 0.12)',
-            color: '#c084fc',
-            fontSize: '0.78rem',
-            fontWeight: 700,
+            border: '1px solid rgba(16, 185, 129, 0.5)',
+            background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.25) 100%)',
+            color: '#34d399',
+            fontSize: '0.76rem',
+            fontWeight: 800,
             cursor: 'pointer',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: '0.35rem',
+            boxShadow: '0 2px 8px rgba(16, 185, 129, 0.2)',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(16, 185, 129, 0.35)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.25) 100%)')}
+        >
+          <span>🧠</span> Knowledge Blocks
+        </button>
+
+        <button
+          type="button"
+          onClick={onOpenKeyModal}
+          style={{
+            padding: '0.65rem 0.4rem',
+            borderRadius: '8px',
+            border: '1px solid rgba(168, 85, 247, 0.4)',
+            background: 'rgba(168, 85, 247, 0.12)',
+            color: '#c084fc',
+            fontSize: '0.76rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '0.3rem',
             transition: 'background 0.2s'
           }}
           onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(168, 85, 247, 0.25)')}
@@ -488,7 +579,7 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
           ref={fileInputRef}
           type="file"
           multiple
-          accept="video/mp4,video/webm,video/quicktime,video/x-matroska"
+          accept="video/*,.mp4,.mov,.webm,.mkv,.avi,.m4v"
           style={{ display: 'none' }}
           onChange={(e) => e.target.files && onUpload(e.target.files)}
           disabled={isUploading}
@@ -521,15 +612,45 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
       }}>
         {filteredClips.length === 0 ? (
           <div style={{
-            textAlign: 'center',
-            padding: '2rem 1rem',
-            color: '#64748b',
-            fontSize: '0.85rem',
-            border: '1px solid #1e293b',
-            borderRadius: '10px',
-            background: 'rgba(15, 23, 42, 0.4)'
+            textAlign: 'left',
+            padding: '1.25rem',
+            border: '1px solid #2e2a44',
+            borderRadius: '12px',
+            background: 'linear-gradient(180deg, #12111a 0%, #0d0c13 100%)',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)'
           }}>
-            {searchQuery ? `No blocks found matching "${searchQuery}".` : 'No blocks in this category.'}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+              <span style={{ fontSize: '1.2rem' }}>🎬</span>
+              <h4 style={{ margin: 0, fontSize: '0.92rem', color: '#f3f4f6', fontWeight: 700 }}>
+                Clean Slate: Ready for Fresh Micro-Takes
+              </h4>
+            </div>
+            
+            <p style={{ margin: '0 0 0.85rem', fontSize: '0.78rem', color: '#a1a1aa', lineHeight: 1.45 }}>
+              For peak AI storytelling and common-sense assembly, record in <strong>30 to 60-second focused takes</strong> per feature.
+            </p>
+
+            <div style={{
+              background: '#09080e',
+              border: '1px solid #201e2e',
+              borderRadius: '8px',
+              padding: '0.75rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+              fontSize: '0.74rem'
+            }}>
+              <div style={{ color: '#c4b5fd', fontWeight: 600 }}>🎯 Recommended 5-Shot Micro-Demo List:</div>
+              <div style={{ color: '#d4d4d8' }}>• <strong>Shot 1: The Friction / Problem (30s)</strong> — The $2.85 CPC bleed / bounce rate</div>
+              <div style={{ color: '#d4d4d8' }}>• <strong>Shot 2: Client Dossier & Messaging (45s)</strong> — Jenny Vance economics & roast-to-ship</div>
+              <div style={{ color: '#d4d4d8' }}>• <strong>Shot 3: Unexpected Havoc Call (30s)</strong> — Emergency phone call / $4 pricing glitch</div>
+              <div style={{ color: '#d4d4d8' }}>• <strong>Shot 4: Live Workbench & Defect Fix (45s)</strong> — H1 headline edit & instant score jump</div>
+              <div style={{ color: '#d4d4d8' }}>• <strong>Shot 5: Pass the Week & Verification (30s)</strong> — Sarah Jenkins approval & portfolio proof</div>
+            </div>
+
+            <div style={{ marginTop: '0.85rem', textAlign: 'center', fontSize: '0.72rem', color: '#818cf8', fontWeight: 600 }}>
+              ⬆️ Drop your new takes in the box above or save to OBS folder
+            </div>
           </div>
         ) : (
           filteredClips.map((clip) => {
@@ -548,19 +669,34 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                   position: 'relative'
                 }}
               >
-                {/* Thumbnail */}
-                <div style={{
-                  width: '95px',
-                  height: '65px',
-                  borderRadius: '6px',
-                  overflow: 'hidden',
-                  background: '#090a0f',
-                  flexShrink: 0,
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center'
-                }}>
+                {/* Thumbnail with Click-to-Play Overlay */}
+                <div
+                  onClick={() => setPreviewClip(clip)}
+                  title="Click to play and preview this video block"
+                  style={{
+                    width: '105px',
+                    height: '70px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    background: '#090a0f',
+                    flexShrink: 0,
+                    position: 'relative',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    border: '1px solid #2d2d3f',
+                    transition: 'transform 0.15s, border-color 0.15s'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'scale(1.03)';
+                    e.currentTarget.style.borderColor = role.badgeColor;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'scale(1)';
+                    e.currentTarget.style.borderColor = '#2d2d3f';
+                  }}
+                >
                   {clip.thumbnailUrl ? (
                     <img
                       src={clip.thumbnailUrl}
@@ -568,18 +704,46 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <span style={{ fontSize: '1.2rem' }}>🎬</span>
+                    <span style={{ fontSize: '1.3rem' }}>🎬</span>
                   )}
+
+                  {/* Play Button Icon Overlay */}
+                  <div style={{
+                    position: 'absolute',
+                    inset: 0,
+                    background: 'rgba(0, 0, 0, 0.35)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'background 0.2s'
+                  }}>
+                    <div style={{
+                      width: '26px',
+                      height: '26px',
+                      borderRadius: '50%',
+                      background: 'rgba(99, 102, 241, 0.9)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#fff',
+                      fontSize: '0.75rem',
+                      paddingLeft: '2px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.6)'
+                    }}>
+                      ▶
+                    </div>
+                  </div>
+
                   <span style={{
                     position: 'absolute',
                     bottom: '2px',
                     right: '4px',
-                    background: 'rgba(0,0,0,0.8)',
+                    background: 'rgba(0,0,0,0.85)',
                     color: '#f8fafc',
-                    fontSize: '0.65rem',
+                    fontSize: '0.62rem',
                     padding: '1px 4px',
                     borderRadius: '3px',
-                    fontWeight: 600
+                    fontWeight: 700
                   }}>
                     {clip.duration.toFixed(1)}s
                   </span>
@@ -655,9 +819,38 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
                     {clip.description || role.description}
                   </p>
 
-                  {/* Badges / Tags */}
-                  <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                    {clip.tags && clip.tags.slice(0, 3).map((tag, tIdx) => (
+                  {/* Interactive Play Button & Badges */}
+                  <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setPreviewClip(clip)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.35rem',
+                        background: 'rgba(99, 102, 241, 0.22)',
+                        border: '1px solid rgba(99, 102, 241, 0.55)',
+                        color: '#c7d2fe',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        padding: '2px 8px',
+                        borderRadius: '5px',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = 'rgba(99, 102, 241, 0.4)';
+                        e.currentTarget.style.color = '#ffffff';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'rgba(99, 102, 241, 0.22)';
+                        e.currentTarget.style.color = '#c7d2fe';
+                      }}
+                    >
+                      ▶️ Play Raw Video Block
+                    </button>
+
+                    {clip.tags && clip.tags.slice(0, 2).map((tag, tIdx) => (
                       <span
                         key={tIdx}
                         style={{
@@ -702,6 +895,164 @@ export const ClipLibrary: React.FC<ClipLibraryProps> = ({
           })
         )}
       </div>
+
+      {/* 🎬 Raw Block Video Preview Modal */}
+      {previewClip && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(4, 5, 10, 0.88)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.5rem'
+          }}
+          onClick={() => setPreviewClip(null)}
+        >
+          <div
+            style={{
+              background: '#0e1017',
+              border: `2px solid ${getBlockRole(previewClip).badgeColor || '#6366f1'}`,
+              borderRadius: '16px',
+              width: '100%',
+              maxWidth: '680px',
+              padding: '1.5rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '1rem',
+              boxShadow: '0 25px 60px -15px rgba(0, 0, 0, 0.75)',
+              maxHeight: '90vh',
+              overflowY: 'auto'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: '0.82rem',
+                  fontWeight: 900,
+                  padding: '3px 9px',
+                  borderRadius: '6px',
+                  background: getBlockRole(previewClip).badgeColor,
+                  color: '#090a0f'
+                }}>
+                  [{previewClip.blockCode || 'RAW'}]
+                </span>
+                <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#f8fafc', fontWeight: 700 }}>
+                  {previewClip.title}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewClip(null)}
+                style={{
+                  background: '#1e1e2d',
+                  border: '1px solid #33334d',
+                  color: '#94a3b8',
+                  fontSize: '1rem',
+                  width: '32px',
+                  height: '32px',
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Video Player */}
+            <div style={{
+              background: '#000',
+              borderRadius: '10px',
+              overflow: 'hidden',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '260px',
+              maxHeight: '480px'
+            }}>
+              <video
+                key={previewClip.videoUrl}
+                src={previewClip.videoUrl}
+                controls
+                autoPlay
+                loop
+                style={{
+                  width: '100%',
+                  maxHeight: '480px',
+                  display: 'block'
+                }}
+              />
+            </div>
+
+            {/* Metadata Strip */}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: '0.78rem', background: '#1c1c2b', color: '#cbd5e1', padding: '3px 8px', borderRadius: '5px' }}>
+                ⏱️ <strong>Duration:</strong> {previewClip.duration.toFixed(1)}s
+              </span>
+              <span style={{ fontSize: '0.78rem', background: '#1c1c2b', color: '#cbd5e1', padding: '3px 8px', borderRadius: '5px' }}>
+                📐 <strong>Format:</strong> {previewClip.aspectRatio || '9:16'} ({previewClip.width || 1080}x{previewClip.height || 1920})
+              </span>
+              <span style={{ fontSize: '0.78rem', background: '#1c1c2b', color: '#cbd5e1', padding: '3px 8px', borderRadius: '5px' }}>
+                ⚡ <strong>Type:</strong> {previewClip.contentType === 'screen_recording' ? 'Interactive UI Screen' : 'Live Action / B-Roll'}
+              </span>
+            </div>
+
+            {/* Description */}
+            <p style={{ margin: 0, fontSize: '0.85rem', color: '#94a3b8', lineHeight: '1.4' }}>
+              {previewClip.description}
+            </p>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <a
+                href={previewClip.videoUrl}
+                download={`${previewClip.title.replace(/\s+/g, '_').toLowerCase()}.mp4`}
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.4rem',
+                  padding: '0.5rem 1rem',
+                  borderRadius: '8px',
+                  background: '#1e1e2d',
+                  color: '#f8fafc',
+                  border: '1px solid #3b3b54',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  textDecoration: 'none'
+                }}
+              >
+                ⬇️ Download Raw Clip MP4
+              </a>
+              <button
+                type="button"
+                onClick={() => setPreviewClip(null)}
+                style={{
+                  padding: '0.5rem 1.25rem',
+                  borderRadius: '8px',
+                  background: '#6366f1',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
