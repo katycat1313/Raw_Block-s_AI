@@ -2836,7 +2836,7 @@ app.post('/api/segment/omni-transform', async (req, res) => {
         scriptPath,
         prompt,
         '--video', trimmedPath,
-        '--model', 'gemini-omni-flash-preview',
+        '--model', 'gemini-omni-1.2-flash',
         '--resolution', '720p',
         '--output', transformedOut
       ], {

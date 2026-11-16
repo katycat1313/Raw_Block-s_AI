@@ -232,7 +232,7 @@ export async function produceCommercialVideo({ plan, voiceId = 'aura-orion-en', 
           duration: Math.min(10, Math.max(4, Math.round(sc.durationSec || 4))),
           resolution: '720p',
           aspect_ratio: '16:9',
-          model: 'gemini-omni-flash-preview',
+          model: 'gemini-omni-1.2-flash',
           output: vidOut
         });
       }
