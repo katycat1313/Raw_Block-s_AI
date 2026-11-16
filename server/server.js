@@ -24,6 +24,7 @@ import { chatWithClientPersona, CLIENT_PERSONAS } from './clientPersonaService.j
 import { producePremiumTofuVideo } from './tofuDirectorService.js';
 import { planCommercial, refineCommercial, produceCommercialVideo } from './commercialDirectorService.js';
 import { getSocialAuth, connectTikTok, connectFacebook, disconnectSocial, publishToTikTok, publishToFacebook } from './socialService.js';
+import { createAgentApiRouter } from './agentApiRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -643,6 +644,24 @@ async function getAllRenderedVideos() {
     return [];
   }
 }
+
+// Mount V1 API Key-Protected Router for External Social Media Agents
+app.use('/api/v1', createAgentApiRouter({
+  getClips: () => clipDatabase,
+  addClips: (newClips) => {
+    clipDatabase.push(...newClips);
+  },
+  saveClipDatabase,
+  getCurrentProject: () => currentProject,
+  getCurrentAppUrl: () => currentAppUrl,
+  storageDir,
+  uploadsDir,
+  thumbnailsDir,
+  audioDir,
+  rendersDir,
+  musicDir,
+  getAllRenderedVideos
+}));
 
 // Get all uploaded clips (auto-categorized and enriched with block taxonomy)
 app.get('/api/clips', async (req, res) => {
