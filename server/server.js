@@ -24,7 +24,7 @@ import { chatWithClientPersona, CLIENT_PERSONAS } from './clientPersonaService.j
 import { producePremiumTofuVideo } from './tofuDirectorService.js';
 import { planCommercial, refineCommercial, produceCommercialVideo } from './commercialDirectorService.js';
 import { getSocialAuth, connectTikTok, connectFacebook, disconnectSocial, publishToTikTok, publishToFacebook } from './socialService.js';
-import { createAgentApiRouter } from './agentApiRoutes.js';
+import { createAgentApiRouter, createMeridianBridgeRouter } from './agentApiRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -109,7 +109,7 @@ if (fs.existsSync(blueprintPath)) {
 
 // Middlewares
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 // Serve static storage assets (uploads, thumbnails, renders, audio)
 app.use('/storage', express.static(storageDir));
@@ -644,6 +644,11 @@ async function getAllRenderedVideos() {
     return [];
   }
 }
+
+// Mount Meridian compatibility bridge (/api/extract, /api/assemble)
+app.use('/api', createMeridianBridgeRouter({
+  getClips: () => clipDatabase
+}));
 
 // Mount V1 API Key-Protected Router for External Social Media Agents
 app.use('/api/v1', createAgentApiRouter({
